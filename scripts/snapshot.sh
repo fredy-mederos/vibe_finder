@@ -1,14 +1,18 @@
 #!/bin/bash
-# Launches the Debug build on a made-up library and captures only Vibe Finder's window. Handy for
-# checking UI changes without showing anybody's real files.
+# Launches a copy of the Debug build on a made-up library and captures only that copy's window. Handy
+# for checking UI changes without showing anybody's real files. A Vibe Finder the user has open is
+# left alone: the copy runs next to it and is quit after the capture. It only comes to the front for
+# the moment of the capture.
 #
 # Usage:   scripts/snapshot.sh <output.png> <seconds-to-wait> [app arguments...]
 # Example: scripts/snapshot.sh /tmp/screenshots.png 8 -VFSelect screenshots -VFSearch "sign in"
 #
 # Debug app arguments are listed above LaunchOptions in VibeFinder/App/AppContainer.swift.
-# Set VF_SAMPLE_DIR to reuse a sample library (and its index) between runs; otherwise one is made
-# in a temporary folder. Keep it outside ~/Documents, ~/Desktop and ~/Downloads, where macOS would ask
-# for permission.
+# VF_SAMPLE_DIR  reuse a sample library (and its index) between runs; otherwise one is made in a
+#                temporary folder. Keep it outside ~/Documents, ~/Desktop and ~/Downloads, where macOS
+#                would ask for permission.
+# VF_KEEP=1      leave the copy running and print its process id on a second line, to drive it further
+#                (press its buttons with scripts/press.swift, capture again with scripts/capture.sh).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -24,15 +28,28 @@ fi
 folders=""
 for folder in "$sample"/library/*/; do folders="$folders${folders:+:}${folder%/}"; done
 
-pkill -x "Vibe Finder" 2>/dev/null || true
-sleep 0.5
-open -n "$app" --args -VFFolders "$folders" -VFDataDirectory "$sample/index" -ApplePersistenceIgnoreState YES "$@"
-sleep "$wait"
+# The copy this script started last time, if it was kept.
+if [ -f "$sample/app.pid" ]; then
+    kill "$(cat "$sample/app.pid")" 2>/dev/null || true
+    rm -f "$sample/app.pid"
+fi
 
-id=$(swift scripts/window-id.swift "Vibe Finder")
-if [ "$id" = "0" ]; then
-    echo "Vibe Finder has no window on screen" >&2
+before=$(pgrep -x "Vibe Finder" || true)
+open -n -g "$app" --args -VFFolders "$folders" -VFDataDirectory "$sample/index" -ApplePersistenceIgnoreState YES "$@"
+sleep "$wait"
+pid=$(comm -13 <(echo "$before" | sort) <(pgrep -x "Vibe Finder" | sort) | head -1)
+if [ -z "$pid" ]; then
+    echo "Vibe Finder didn't start" >&2
     exit 1
 fi
-screencapture -x -o -l "$id" "$out"
-echo "$out"
+
+if ! scripts/capture.sh "$pid" "$out"; then
+    kill "$pid" 2>/dev/null || true
+    exit 1
+fi
+if [ "${VF_KEEP:-}" = "1" ]; then
+    echo "$pid" > "$sample/app.pid"
+    echo "$pid"
+else
+    kill "$pid" 2>/dev/null || true
+fi

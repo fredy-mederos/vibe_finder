@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import Testing
 import FinderDomain
 @testable import FinderData
@@ -51,6 +52,16 @@ private struct TempFolder {
         #expect(output.unreadableFolders.isEmpty)
     }
 
+    @Test func thePhotosLibraryIsLeftAlone() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        try folder.write("Photos Library.photoslibrary/originals/0/IMG_0001.heic")
+        try folder.write("Photos Library.photoslibrary/database/Photos.sqlite")
+        try folder.write("beach.jpg")
+        let output = FileSystemScanner().scan(ScanRequest(folders: [folder.path]))
+        #expect(output.files.map(\.name) == ["beach.jpg"])
+    }
+
     @Test func aChosenFolderIsNeverAProjectItself() throws {
         let folder = try TempFolder()
         defer { folder.remove() }
@@ -64,6 +75,49 @@ private struct TempFolder {
         let output = FileSystemScanner().scan(ScanRequest(folders: ["/nonexistent-\(UUID().uuidString)"]))
         #expect(output.files.isEmpty)
         #expect(output.unreadableFolders.count == 1)
+    }
+}
+
+@Suite struct ProjectArtworkFinderTests {
+    @Test func findsAnAppsIconInItsAssetCatalog() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        try folder.write("App.xcodeproj/project.pbxproj")
+        try folder.write("App/Assets.xcassets/AppIcon.appiconset/Contents.json", "{}")
+        try folder.write("App/Assets.xcassets/AppIcon.appiconset/icon_16.png", "small")
+        try folder.write("App/Assets.xcassets/AppIcon.appiconset/icon_1024.png", String(repeating: "x", count: 5_000))
+        try folder.write("App/Assets.xcassets/Logo.imageset/logo.png", String(repeating: "x", count: 9_000))
+        try folder.write("docs/favicon.ico", String(repeating: "x", count: 9_000))
+        #expect(FileSystemProjectArtworkFinder().artworkPath(forProjectAt: folder.path)
+            == folder.path + "/App/Assets.xcassets/AppIcon.appiconset/icon_1024.png")
+    }
+
+    @Test func findsAnAndroidLauncherIconAndAWebFavicon() throws {
+        let android = try TempFolder()
+        defer { android.remove() }
+        try android.write("build.gradle")
+        try android.write("app/src/main/res/mipmap-mdpi/ic_launcher.png")
+        try android.write("app/src/main/res/mipmap-xxxhdpi/ic_launcher.png")
+        try android.write("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml")
+        #expect(FileSystemProjectArtworkFinder().artworkPath(forProjectAt: android.path)
+            == android.path + "/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png")
+
+        let web = try TempFolder()
+        defer { web.remove() }
+        try web.write("package.json", "{}")
+        try web.write("public/favicon.ico")
+        // A dependency's own icon is never the project's.
+        try web.write("node_modules/some-lib/apple-touch-icon.png")
+        #expect(FileSystemProjectArtworkFinder().artworkPath(forProjectAt: web.path) == web.path + "/public/favicon.ico")
+    }
+
+    @Test func aProjectWithoutAnIconHasNone() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        try folder.write("Package.swift")
+        try folder.write("Sources/App/main.swift")
+        try folder.write("docs/screenshot.png")
+        #expect(FileSystemProjectArtworkFinder().artworkPath(forProjectAt: folder.path) == nil)
     }
 }
 
@@ -86,6 +140,41 @@ private struct TempFolder {
         #expect(cached?.stages == [.imageMetadata, .imageText])
         #expect(cached?.isCurrent(for: FileFacts(path: "/a/x.png", size: 42, modified: Date(timeIntervalSinceReferenceDate: 1_000.5))) == true)
         #expect(cached?.isCurrent(for: FileFacts(path: "/a/x.png", size: 43, modified: Date(timeIntervalSinceReferenceDate: 1_000.5))) == false)
+    }
+
+    @Test func remembersAProjectsArtwork() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        var project = record("/code/app", kind: .projects, text: nil, stages: .projectArtwork)
+        project.item.artworkPath = "/code/app/public/favicon.png"
+        SQLiteIndexStore(directory: folder.url).save([project, record("/code/x.png", kind: .images, text: nil)])
+        let cached = SQLiteIndexStore(directory: folder.url).loadAll()
+        #expect(cached["/code/app"]?.artworkPath == "/code/app/public/favicon.png")
+        #expect(cached["/code/x.png"]?.artworkPath == nil)
+    }
+
+    @Test func anIndexFromBeforeArtworkKeepsWhatItLearned() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        // The index as version 1 of the app left it.
+        var database: OpaquePointer?
+        sqlite3_open(folder.url.appendingPathComponent("index.sqlite").path, &database)
+        sqlite3_exec(database, """
+            CREATE TABLE files(id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, size INTEGER NOT NULL, modified REAL NOT NULL,
+                kind TEXT NOT NULL, subkind TEXT NOT NULL, source INTEGER NOT NULL, unclear INTEGER NOT NULL,
+                detail TEXT NOT NULL, stages INTEGER NOT NULL);
+            INSERT INTO files(path, size, modified, kind, subkind, source, unclear, detail, stages)
+                VALUES('/a/x.png', 42, 1000.5, 'screenshots', 'Mac', 1, 0, '10 × 10', 9);
+            PRAGMA user_version = 10007;
+            """, nil, nil, nil)
+        sqlite3_close(database)
+
+        let store = SQLiteIndexStore(directory: folder.url, rulesVersion: 7)
+        #expect(store.loadAll()["/a/x.png"]?.classification.kind == .screenshots)
+        var project = record("/code/app", kind: .projects, text: nil)
+        project.item.artworkPath = "/code/app/icon.png"
+        store.save([project])
+        #expect(store.loadAll()["/code/app"]?.artworkPath == "/code/app/icon.png")
     }
 
     @Test func anIndexMadeWithOtherRulesStartsOver() throws {
@@ -156,5 +245,15 @@ private struct TempFolder {
         settings.readsTextInImages = false
         store.save(settings)
         #expect(UserDefaultsSettingsStore(defaults: defaults, home: "/Users/me").load() == settings)
+    }
+}
+
+@Suite struct FileManagerTrashTests {
+    // Only the failure is tried here: a success would leave test files in the Trash of whoever runs this.
+    @Test func reportsWhatItCouldNotMove() async {
+        let missing = "/nonexistent-" + UUID().uuidString + "/file.txt"
+        let failures = await FileManagerTrash().moveToTrash([missing])
+        #expect(failures.map(\.path) == [missing])
+        #expect(failures.first?.reason.isEmpty == false)
     }
 }

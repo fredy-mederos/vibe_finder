@@ -7,6 +7,7 @@ import FinderData
 struct AppContainer {
     let library: LibraryViewModel
     let browser: BrowserViewModel
+    let appearance: AppearanceModel
     let thumbnails: any ThumbnailProviding
     let files: any FileActing
 
@@ -19,6 +20,7 @@ struct AppContainer {
         // The order is the order the steps run in: what a file says about itself first, a model only
         // for what's still unclear, and text once it's known what the file is.
         let enrichLibrary = EnrichLibrary(enrichers: [
+            ProjectArtworkEnricher(finder: FileSystemProjectArtworkFinder(policy: policy)),
             ImageMetadataEnricher(inspector: ImageIOInspector()),
             ImageUnderstandingEnricher(classifier: VisionImageClassifier()),
             ImageTextEnricher(recognizer: VisionTextRecognizer()),
@@ -39,12 +41,19 @@ struct AppContainer {
 
         let library = LibraryViewModel(
             scanLibrary: scanLibrary, enrichLibrary: enrichLibrary, summarize: SummarizeLibrary(), visibleItems: VisibleItems(),
-            cache: index, settingsStore: settingsStore, watcher: FSEventsFolderWatcher(policy: policy)
+            trashItems: TrashItems(trash: FileManagerTrash()), cache: index, settingsStore: settingsStore,
+            watcher: FSEventsFolderWatcher(policy: policy)
         )
-        let browser = BrowserViewModel(library: library, arrange: ArrangeItems(), searchContent: SearchContent(index: index))
+        // …nor their view preferences (the same app, so the same preferences file otherwise).
+        let preferences = options.folders == nil ? UserDefaults.standard : UserDefaults(suiteName: debugPreferences) ?? .standard
+        let browser = BrowserViewModel(library: library, arrange: ArrangeItems(), searchContent: SearchContent(index: index),
+                                       preferences: preferences)
         options.apply(to: browser)
-        return AppContainer(library: library, browser: browser, thumbnails: QuickLookThumbnailProvider(), files: WorkspaceFileActions())
+        return AppContainer(library: library, browser: browser, appearance: AppearanceModel(preferences: preferences),
+                            thumbnails: ProjectThumbnailProvider(base: QuickLookThumbnailProvider()), files: WorkspaceFileActions())
     }
+
+    private static let debugPreferences = "com.fredymederos.VibeFinder.debug"
 
     private static var defaultDataDirectory: URL {
         URL.applicationSupportDirectory.appendingPathComponent("VibeFinder", isDirectory: true)

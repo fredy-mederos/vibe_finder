@@ -15,7 +15,7 @@ struct VibeFinderApp: App {
         }
 
         Settings {
-            SettingsView(library: container.library)
+            SettingsView(library: container.library, appearance: container.appearance)
         }
     }
 }
@@ -38,9 +38,20 @@ struct LibraryCommands: Commands {
                 }
             }
             Divider()
+            Button("Collapse All Groups") { browser.setAllSectionsCollapsed(true) }
+                .disabled(!browser.canCollapseSections)
+            Button("Expand All Groups") { browser.setAllSectionsCollapsed(false) }
+                .disabled(browser.collapsedSections.isEmpty)
+            Divider()
             Button("Scan Folders Again") { library.rescan() }
                 .keyboardShortcut("r")
             Divider()
+        }
+        // No shortcut here on purpose: Command-Delete works in the list (and shows in its menu), and
+        // must stay what it is while typing in the search field.
+        CommandGroup(replacing: .newItem) {
+            Button("Move to Trash…") { browser.requestTrashOfSelection() }
+                .disabled(browser.selection.isEmpty)
         }
     }
 }

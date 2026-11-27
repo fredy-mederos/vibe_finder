@@ -48,6 +48,25 @@ public protocol FolderWatching: AnyObject, Sendable {
     func stop()
 }
 
+/// Why a file is still where it was.
+public struct TrashFailure: Sendable, Equatable {
+    public var path: String
+    /// The system's explanation, already in the user's language.
+    public var reason: String
+
+    public init(path: String, reason: String) {
+        self.path = path
+        self.reason = reason
+    }
+}
+
+/// Moves files and folders to the Trash, where they can be put back from. Nothing is ever deleted
+/// for good through this port.
+public protocol ItemTrashing: Sendable {
+    /// - Returns: what couldn't be moved; empty when everything went to the Trash.
+    func moveToTrash(_ paths: [String]) async -> [TrashFailure]
+}
+
 // MARK: - Index
 
 /// Remembers what enrichment learned, so files are only opened again when they change.
@@ -82,6 +101,11 @@ public protocol TextExtracting: Sendable {
 /// Reads the text in a picture (OCR).
 public protocol TextRecognizing: Sendable {
     func recognizeText(inImageAt path: String) -> String?
+}
+
+/// Finds the picture a project goes by, among the files in its folder.
+public protocol ProjectArtworkFinding: Sendable {
+    func artworkPath(forProjectAt path: String) -> String?
 }
 
 // MARK: - On-device models

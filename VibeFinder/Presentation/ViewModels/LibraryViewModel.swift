@@ -29,6 +29,7 @@ final class LibraryViewModel {
     private let enrichLibrary: EnrichLibrary
     private let summarize: SummarizeLibrary
     private let visibleItems: VisibleItems
+    private let trashItems: TrashItems
     private let cache: any EnrichmentCaching
     private let settingsStore: any SettingsStoring
     private let watcher: any FolderWatching
@@ -41,11 +42,12 @@ final class LibraryViewModel {
     @ObservationIgnored private var hasStarted = false
 
     init(scanLibrary: ScanLibrary, enrichLibrary: EnrichLibrary, summarize: SummarizeLibrary, visibleItems: VisibleItems,
-         cache: any EnrichmentCaching, settingsStore: any SettingsStoring, watcher: any FolderWatching) {
+         trashItems: TrashItems, cache: any EnrichmentCaching, settingsStore: any SettingsStoring, watcher: any FolderWatching) {
         self.scanLibrary = scanLibrary
         self.enrichLibrary = enrichLibrary
         self.summarize = summarize
         self.visibleItems = visibleItems
+        self.trashItems = trashItems
         self.cache = cache
         self.settingsStore = settingsStore
         self.watcher = watcher
@@ -103,17 +105,31 @@ final class LibraryViewModel {
         positions[path].map { allItems[$0] }
     }
 
+    /// Moves the items to the Trash and takes them out of the library right away (the next scan
+    /// would too, a moment later).
+    func moveToTrash(_ items: [FileItem]) async -> TrashOutcome {
+        let outcome = await trashItems.execute(items)
+        if !outcome.trashed.isEmpty {
+            replaceItems(with: trashItems.remaining(of: allItems, after: outcome))
+        }
+        return outcome
+    }
+
     // MARK: - Scanning and enriching
 
     private func apply(_ scan: LibraryScan) {
         unreadableFolders = scan.unreadableFolders
         // A scan the watcher asked for often finds nothing new: leave the UI alone then.
         if scan.items != allItems {
-            allItems = scan.items
-            positions = Dictionary(scan.items.enumerated().map { ($1.path, $0) }, uniquingKeysWith: { first, _ in first })
-            publish()
+            replaceItems(with: scan.items)
         }
         enrich(scan.pending)
+    }
+
+    private func replaceItems(with items: [FileItem]) {
+        allItems = items
+        positions = Dictionary(items.enumerated().map { ($1.path, $0) }, uniquingKeysWith: { first, _ in first })
+        publish()
     }
 
     private func enrich(_ pending: [FileItem]) {

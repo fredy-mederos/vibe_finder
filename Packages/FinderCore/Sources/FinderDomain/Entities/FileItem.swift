@@ -56,6 +56,8 @@ public struct FileItem: Identifiable, Hashable, Sendable {
     public let inProject: Bool
     /// A short fact shown under the name: "1170 × 2532", "3:45", "120 files".
     public var detail: String
+    /// For a project, the picture it goes by (its app's icon, its site's favicon), when it has one.
+    public var artworkPath: String?
     /// The name without case or diacritics, for searching.
     public let folded: String
 

@@ -183,28 +183,46 @@ final class RowItem: ThumbnailCell {
     }
 }
 
-/// A section's title and how many items it has, over a material so pinned headers stay readable.
+/// A group's header: a disclosure chevron, the title and how many items it has, over a material so
+/// pinned headers stay readable. The whole header is a button that folds or unfolds the group.
 final class SectionHeaderView: NSView, NSCollectionViewElement {
     static let identifier = NSUserInterfaceItemIdentifier("SectionHeaderView")
 
+    private let chevron = NSImageView()
     private let titleField = ThumbnailCell.label(size: 13, color: .labelColor, weight: .semibold)
     private let countField = ThumbnailCell.label(size: 12, color: .secondaryLabelColor)
+    private let button = NSButton(title: "", target: nil, action: nil)
+    private var onToggle: (Bool) -> Void = { _ in }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         let background = NSVisualEffectView()
         background.material = .headerView
         background.blendingMode = .withinWindow
-        background.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(background)
-        addSubview(titleField)
-        addSubview(countField)
+        chevron.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 10, weight: .bold)
+        chevron.contentTintColor = .secondaryLabelColor
+        // Draws nothing itself: it only makes the whole header clickable, and a button to assistive apps.
+        button.isTransparent = true
+        button.target = self
+        button.action = #selector(toggle)
+        button.toolTip = String(localized: "Collapse or expand this group. Option-click to do it for every group.")
+        for subview in [background, chevron, titleField, countField, button] {
+            subview.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(subview)
+        }
         NSLayoutConstraint.activate([
             background.topAnchor.constraint(equalTo: topAnchor),
             background.bottomAnchor.constraint(equalTo: bottomAnchor),
             background.leadingAnchor.constraint(equalTo: leadingAnchor),
             background.trailingAnchor.constraint(equalTo: trailingAnchor),
-            titleField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            button.topAnchor.constraint(equalTo: topAnchor),
+            button.bottomAnchor.constraint(equalTo: bottomAnchor),
+            button.leadingAnchor.constraint(equalTo: leadingAnchor),
+            button.trailingAnchor.constraint(equalTo: trailingAnchor),
+            chevron.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            chevron.centerYAnchor.constraint(equalTo: centerYAnchor),
+            chevron.widthAnchor.constraint(equalToConstant: 14),
+            titleField.leadingAnchor.constraint(equalTo: chevron.trailingAnchor, constant: 4),
             titleField.centerYAnchor.constraint(equalTo: centerYAnchor),
             countField.leadingAnchor.constraint(equalTo: titleField.trailingAnchor, constant: 8),
             countField.firstBaselineAnchor.constraint(equalTo: titleField.firstBaselineAnchor),
@@ -218,8 +236,18 @@ final class SectionHeaderView: NSView, NSCollectionViewElement {
         fatalError("init(coder:) is not used")
     }
 
-    func configure(title: String, count: Int) {
+    /// - Parameter onToggle: called on a click, with `true` when every group should follow (Option).
+    func configure(title: String, count: Int, isCollapsed: Bool, onToggle: @escaping (Bool) -> Void) {
         titleField.stringValue = title
         countField.stringValue = count.formatted()
+        // "forward" points the way text runs, so it's right in right-to-left languages too.
+        chevron.image = NSImage(systemSymbolName: isCollapsed ? "chevron.forward" : "chevron.down", accessibilityDescription: nil)
+        button.setAccessibilityLabel(title)
+        button.setAccessibilityValue(isCollapsed ? String(localized: "collapsed") : String(localized: "expanded"))
+        self.onToggle = onToggle
+    }
+
+    @objc private func toggle() {
+        onToggle(NSApp.currentEvent?.modifierFlags.contains(.option) ?? false)
     }
 }

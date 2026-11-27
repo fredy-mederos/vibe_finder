@@ -58,6 +58,7 @@ public struct ScanLibrary: Sendable {
             let known = cached[facts.path].flatMap { $0.isCurrent(for: facts) ? $0 : nil }
             if let known {
                 item.classification = known.classification
+                item.artworkPath = known.artworkPath
                 if !known.detail.isEmpty { item.detail = known.detail }
             }
             if planner.needsEnrichment(item, cached: known, settings: settings) { pending.append(item) }

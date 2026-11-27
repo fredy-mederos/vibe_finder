@@ -2,8 +2,8 @@
 
 Personal side project: Vibe Finder, a native macOS app that shows what's in your folders by what
 things are (projects, apps, photos, screenshots, screen recordings, music videos, PDFs…) instead of
-by where they are. It indexes the folders as they are and never moves, renames or deletes anything.
-Read `README.md` first: it describes what's shipped.
+by where they are. It indexes the folders as they are; the only change it can make to them is moving
+what the user selects to the Trash, after asking. Read `README.md` first: it describes what's shipped.
 
 ## Architecture: Clean Architecture, enforced by modules
 
@@ -47,6 +47,12 @@ SOLID, concretely:
    Foundation Models language model for what a document or a video is. Constrained to a fixed list,
    greedy sampling, and a model only moves an item when it's confident.
 
+A project's picture follows the same idea (`ProjectArtworkRules`): only the places tools themselves
+keep an icon in (an asset catalog's app icon, an Android launcher icon, a web project's favicon),
+scored so the same project always gets the same one; the folder search is `FileSystemProjectArtworkFinder`.
+How it's drawn on the folder, and the technology marks (plain symbols and letters, never a
+third-party logo), is `Presentation/Services/ProjectThumbnailProvider.swift`.
+
 Answers are stored in the index with the file's size and date and reused until the file changes, so
 the same file keeps its kind. `ClassificationSource` records which of these decided, and the UI shows
 it. When a rule, policy or prompt changes what it would answer, bump `EnrichmentRules.version`: the
@@ -61,15 +67,32 @@ stored answers are dropped and worked out again. Nothing leaves the Mac; don't a
   The project uses a synchronized folder: files added under `VibeFinder/` are compiled automatically;
   don't add them to `project.pbxproj` by hand.
 - Big lists stay in AppKit (`Presentation/Collection/`): a kind can hold tens of thousands of items.
-- Check UI changes with `scripts/snapshot.sh <out.png> <seconds> [debug launch args]`. It runs the
-  Debug build on a made-up library (`scripts/make-sample-library.swift`) with its own index and
-  captures only Vibe Finder's window. Never take screenshots of the user's real library, and keep
-  sample folders outside ~/Documents, ~/Desktop and ~/Downloads (macOS would ask for a permission
-  nobody is there to give). Debug launch arguments are listed above `LaunchOptions` in
-  `App/AppContainer.swift`.
-- Read-only by design: the app opens, previews, reveals and copies paths. Don't add anything that
-  moves, renames or deletes the user's files without the user asking for that feature.
-- `scripts/install.sh` builds Release into ~/Applications. `scripts/make-icon.swift` redraws the icon.
+- Check UI changes with `scripts/snapshot.sh <out.png> <seconds> [debug launch args]`. It runs a
+  separate copy of the Debug build on a made-up library (`scripts/make-sample-library.swift`) with
+  its own index and its own preferences, and captures only that copy's window. The user usually has
+  their own Vibe Finder open on their real library: never quit it (no `pkill`), never take
+  screenshots of it, and keep sample folders outside ~/Documents, ~/Desktop and ~/Downloads (macOS
+  would ask for a permission nobody is there to give). Debug launch arguments are listed above
+  `LaunchOptions` in `App/AppContainer.swift`.
+- To try what a click does, keep the copy running (`VF_KEEP=1 scripts/snapshot.sh …` prints its
+  process id), press things by their accessibility label with `swift scripts/press.swift <pid> "Move
+  to Trash"` (buttons, group headers, menu items, a dialog's buttons) and capture again with
+  `scripts/capture.sh <pid> <out.png>`. Never post synthetic mouse clicks at screen coordinates: they
+  land on whatever window is on top. So new controls need to be real buttons with a label.
+- The app looks, it doesn't reorganize: it opens, previews, reveals and copies paths. The one
+  exception is Move to Trash (`TrashItems`), which the user asked for: only on an explicit action,
+  always after a confirmation, and only ever to the Trash (`ItemTrashing` has no way to delete for
+  good; don't add one). Don't add anything else that moves or renames the user's files unless the
+  user asks for that feature.
+- Libraries behind a privacy permission of their own (`ScanPolicy.sealedExtensions`: the Photos
+  library) are never listed, never asked for a thumbnail and never watched: touching one makes macOS
+  ask the user for access to their photos. If the app should ever show what's inside Photos, that's
+  PhotoKit with the permission asked on purpose, not the file system.
+- The appearance (system, light, dark) is `AppearanceModel`, applied to the whole app.
+- Collapsed groups are view state (`BrowserViewModel.collapsedSections`, per place, kept while the
+  app runs). A folded group still has its header and count; its items aren't selected.
+- `scripts/install.sh` builds Release into ~/Applications. `scripts/make-icon.swift` draws the icon
+  into the asset catalog.
 
 ## Text
 

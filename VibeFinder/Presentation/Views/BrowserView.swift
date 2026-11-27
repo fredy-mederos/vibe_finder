@@ -20,16 +20,62 @@ struct BrowserView: View {
             } else {
                 ItemCollection(
                     sections: browser.result.sections, revision: browser.resultRevision, snippets: browser.snippets,
-                    layout: browser.layout, tileSize: browser.tileSize, selection: $browser.selection,
-                    thumbnails: thumbnails, files: files
+                    layout: browser.layout, tileSize: browser.tileSize, collapsed: browser.collapsedSections,
+                    selection: $browser.selection, thumbnails: thumbnails, files: files,
+                    onToggleSection: { key, everyGroup in
+                        if everyGroup { browser.toggleAllSections(following: key) } else { browser.toggleSection(key) }
+                    },
+                    onTrashRequest: { browser.requestTrashOfSelection() }
                 )
             }
             Divider()
-            InfoBar(items: browser.selectedItems, total: browser.result.count, files: files)
+            InfoBar(items: browser.selectedItems, total: browser.result.count, files: files) {
+                browser.requestTrashOfSelection()
+            }
         }
         .toolbar {
             BrowserToolbar(browser: browser)
         }
+        .modifier(TrashDialogs(browser: browser))
+    }
+}
+
+/// The question before anything goes to the Trash, and the news when something couldn't.
+private struct TrashDialogs: ViewModifier {
+    let browser: BrowserViewModel
+
+    func body(content: Content) -> some View {
+        @Bindable var browser = browser
+        let candidates = browser.trashCandidates
+        content
+            .alert(question(for: candidates), isPresented: isAsking) {
+                Button("Move to Trash", role: .destructive) { browser.confirmTrash() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(candidates.contains { $0.kind == .projects }
+                    ? "A project's folder is moved with everything inside it. You can put items back from the Trash."
+                    : "You can put items back from the Trash.")
+            }
+            .alert("Some items couldn't be moved to the Trash", isPresented: hasFailures) {
+                Button("OK") {}
+            } message: {
+                Text(browser.trashFailures.map(\.reason).formatted(.list(type: .and, width: .short)))
+            }
+    }
+
+    private func question(for items: [FileItem]) -> String {
+        if items.count == 1, let item = items.first {
+            return String(localized: "Move “\(item.name)” to the Trash?")
+        }
+        return String(localized: "Move \(items.count) items to the Trash?")
+    }
+
+    private var isAsking: Binding<Bool> {
+        Binding { !browser.trashCandidates.isEmpty } set: { if !$0 { browser.trashCandidates = [] } }
+    }
+
+    private var hasFailures: Binding<Bool> {
+        Binding { !browser.trashFailures.isEmpty } set: { if !$0 { browser.trashFailures = [] } }
     }
 }
 
@@ -142,14 +188,17 @@ private struct InfoBar: View {
     let items: [FileItem]
     let total: Int
     let files: any FileActing
+    let trash: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
             if items.count == 1, let item = items.first {
                 SelectedItemInfo(item: item, files: files)
+                TrashButton(action: trash)
             } else if items.count > 1 {
                 Text("\(items.count) selected · \(items.reduce(Int64(0)) { $0 + $1.size }.formattedFileSize)")
                 Spacer(minLength: 0)
+                TrashButton(action: trash)
             } else {
                 Text("\(total) items")
                 Spacer(minLength: 0)
@@ -160,6 +209,19 @@ private struct InfoBar: View {
         .lineLimit(1)
         .padding(.horizontal, 16)
         .frame(height: 30)
+    }
+}
+
+private struct TrashButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "trash")
+        }
+        .buttonStyle(.borderless)
+        .help("Move to Trash")
+        .accessibilityLabel("Move to Trash")
     }
 }
 

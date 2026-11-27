@@ -132,7 +132,7 @@ public final class FileFormatCatalog: Sendable {
         add(.other, "Wallet passes", "pkpass")
         add(.other, "Databases", "sqlite sqlite3 db realm")
         add(.other, "Web links", "webloc url webarchive")
-        add(.other, "Media libraries", "photoslibrary musiclibrary tvlibrary imovielibrary")
+        add(.other, "Media libraries", "musiclibrary tvlibrary imovielibrary")
         return table
     }()
 }

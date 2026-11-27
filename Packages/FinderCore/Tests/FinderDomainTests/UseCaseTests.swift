@@ -161,7 +161,7 @@ private final class MemoryCache: EnrichmentCaching {
     func loadAll() -> [String: CachedEnrichment] {
         records.withLock { $0.mapValues {
             CachedEnrichment(size: $0.item.size, modified: $0.item.modified, classification: $0.item.classification,
-                             detail: $0.item.detail, stages: $0.stages)
+                             detail: $0.item.detail, artworkPath: $0.item.artworkPath, stages: $0.stages)
         } }
     }
 
@@ -315,5 +315,121 @@ private struct StubScanner: LibraryScanning {
         let third = scan(size: 11)
         #expect(third.items[0].kind == .images)
         #expect(third.pending.map(\.name) == ["x.png"])
+    }
+}
+
+// MARK: - Project artwork
+
+private struct StubArtworkFinder: ProjectArtworkFinding {
+    func artworkPath(forProjectAt path: String) -> String? { path + "/App/Assets.xcassets/AppIcon.appiconset/icon.png" }
+}
+
+@Suite struct ProjectArtworkTests {
+    @Test func placesThatSayThisIsTheIcon() {
+        // An Xcode app icon beats an Android launcher icon, which beats what web projects ship.
+        let appIcon = ProjectArtworkRules.score(fileName: "icon_512x512@2x.png", folderName: "AppIcon.appiconset")
+        let otherIconSet = ProjectArtworkRules.score(fileName: "icon.png", folderName: "Widget.appiconset")
+        let launcher = ProjectArtworkRules.score(fileName: "ic_launcher.webp", folderName: "mipmap-xxxhdpi")
+        let lowDensity = ProjectArtworkRules.score(fileName: "ic_launcher.png", folderName: "mipmap-mdpi")
+        let touchIcon = ProjectArtworkRules.score(fileName: "apple-touch-icon.png", folderName: "public")
+        let favicon = ProjectArtworkRules.score(fileName: "favicon.ico", folderName: "public")
+        let scores = [appIcon, otherIconSet, launcher, lowDensity, touchIcon, favicon].compactMap { $0 }
+        #expect(scores.count == 6)
+        #expect(scores == scores.sorted(by: >))
+        #expect(Set(scores).count == 6)
+    }
+
+    @Test func placesThatSayNothing() {
+        #expect(ProjectArtworkRules.score(fileName: "Contents.json", folderName: "AppIcon.appiconset") == nil)
+        // Adaptive icons are XML: nothing to show.
+        #expect(ProjectArtworkRules.score(fileName: "ic_launcher.xml", folderName: "mipmap-anydpi-v26") == nil)
+        #expect(ProjectArtworkRules.score(fileName: "ic_launcher_foreground.png", folderName: "mipmap-xxxhdpi") == nil)
+        // A generic name only counts where a project's own assets live, or at its root.
+        #expect(ProjectArtworkRules.score(fileName: "icon.png", folderName: "screenshots") == nil)
+        #expect(ProjectArtworkRules.score(fileName: "icon.png", folderName: "") != nil)
+        #expect(ProjectArtworkRules.score(fileName: "logo.svg", folderName: "assets") != nil)
+        #expect(ProjectArtworkRules.score(fileName: "photo.png", folderName: "public") == nil)
+    }
+
+    @Test func theBestCandidateNeverDependsOnTheOrderFound() {
+        let small = ArtworkCandidate(path: "/p/App/Assets.xcassets/AppIcon.appiconset/16.png", score: 110, depth: 3, weight: 900)
+        let large = ArtworkCandidate(path: "/p/App/Assets.xcassets/AppIcon.appiconset/1024.png", score: 110, depth: 3, weight: 400_000)
+        let deeper = ArtworkCandidate(path: "/p/Extras/Watch/Assets.xcassets/AppIcon.appiconset/1024.png", score: 110, depth: 4, weight: 900_000)
+        let favicon = ArtworkCandidate(path: "/p/public/favicon.ico", score: 63, depth: 1, weight: 5_000_000)
+        for candidates in [[small, large, deeper, favicon], [favicon, deeper, large, small]] {
+            #expect(ProjectArtworkRules.best(candidates) == large)
+        }
+        #expect(ProjectArtworkRules.best([]) == nil)
+        #expect(ProjectArtworkRules.isArtworkContainer("Assets.xcassets"))
+        #expect(!ProjectArtworkRules.isArtworkContainer("Vendor.framework"))
+    }
+
+    @Test func projectsGetTheirArtworkAndKeepItAcrossScans() async {
+        let cache = MemoryCache()
+        let enrichLibrary = EnrichLibrary(enrichers: [ProjectArtworkEnricher(finder: StubArtworkFinder())], cache: cache)
+        let settings = LibrarySettings(folders: ["/code"])
+        func scan() -> LibraryScan {
+            let files = [
+                FileFacts(path: "/code/app", size: 10, role: .project(type: "Xcode", fileCount: 3)),
+                FileFacts(path: "/code/notes.txt", size: 1),
+            ]
+            return ScanLibrary(scanner: StubScanner(files: files), classifier: RuleBasedClassifier.standard(musicFolder: "/m"),
+                               cache: cache, planner: enrichLibrary, home: "/Users/me").execute(settings)
+        }
+        let first = scan()
+        #expect(first.pending.map(\.name) == ["app"])
+        for await _ in enrichLibrary.run(first.pending, settings: settings) {}
+        let second = scan()
+        #expect(second.pending.isEmpty)
+        #expect(second.items.first { $0.kind == .projects }?.artworkPath == "/code/app/App/Assets.xcassets/AppIcon.appiconset/icon.png")
+        #expect(second.items.first { $0.kind == .notes }?.artworkPath == nil)
+    }
+}
+
+// MARK: - Trash
+
+private final class StubTrash: ItemTrashing {
+    /// Paths it refuses to move.
+    let locked: Set<String>
+    let asked = Mutex<[String]>([])
+
+    init(locked: Set<String> = []) {
+        self.locked = locked
+    }
+
+    func moveToTrash(_ paths: [String]) async -> [TrashFailure] {
+        asked.withLock { $0 += paths }
+        return paths.filter { locked.contains($0) }.map { TrashFailure(path: $0, reason: "locked") }
+    }
+}
+
+@Suite struct TrashItemsTests {
+    @Test func trashedItemsLeaveTheLibraryAndFailuresStay() async {
+        let items = [makeItem("/a/1.png", kind: .images), makeItem("/a/2.png", kind: .images), makeItem("/a/3.png", kind: .images)]
+        let useCase = TrashItems(trash: StubTrash(locked: ["/a/2.png"]))
+        let outcome = await useCase.execute(Array(items.prefix(2)))
+        #expect(outcome.trashed == ["/a/1.png"])
+        #expect(outcome.failures == [TrashFailure(path: "/a/2.png", reason: "locked")])
+        #expect(useCase.remaining(of: items, after: outcome).map(\.name) == ["2.png", "3.png"])
+    }
+
+    @Test func aFolderTakesItsContentsAlong() async {
+        let trash = StubTrash()
+        let useCase = TrashItems(trash: trash)
+        let project = makeItem("/code/app", kind: .projects)
+        let inside = makeItem("/code/app/docs/logo.png", kind: .images, inProject: true)
+        let sibling = makeItem("/code/app-notes.md", kind: .notes)
+        // The picture is inside the project: asking for both moves the folder once.
+        let outcome = await useCase.execute([inside, project])
+        #expect(trash.asked.withLock { $0 } == ["/code/app"])
+        #expect(useCase.remaining(of: [project, inside, sibling], after: outcome).map(\.name) == ["app-notes.md"])
+    }
+
+    @Test func nothingTrashedLeavesTheLibraryAlone() async {
+        let items = [makeItem("/a/1.png", kind: .images)]
+        let useCase = TrashItems(trash: StubTrash(locked: ["/a/1.png"]))
+        let outcome = await useCase.execute(items)
+        #expect(outcome.trashed.isEmpty)
+        #expect(useCase.remaining(of: items, after: outcome) == items)
     }
 }

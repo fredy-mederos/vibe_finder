@@ -8,15 +8,19 @@ public struct ScanPolicy: Sendable {
     public var skippedInProjects: Set<String>
     /// Folders treated as one item even if the system doesn't flag them as packages.
     public var packageExtensions: Set<String>
+    /// Libraries another app keeps behind a privacy permission of its own (the Photos library): never
+    /// listed and never touched, so the system has no reason to ask the user for that permission.
+    public var sealedExtensions: Set<String>
     /// Formats macOS may mark as a screen capture.
     public var screenCaptureExtensions: Set<String>
     public var maxDepth: Int
 
     public init(skippedEverywhere: Set<String>, skippedInProjects: Set<String>, packageExtensions: Set<String>,
-                screenCaptureExtensions: Set<String>, maxDepth: Int) {
+                sealedExtensions: Set<String>, screenCaptureExtensions: Set<String>, maxDepth: Int) {
         self.skippedEverywhere = skippedEverywhere
         self.skippedInProjects = skippedInProjects
         self.packageExtensions = packageExtensions
+        self.sealedExtensions = sealedExtensions
         self.screenCaptureExtensions = screenCaptureExtensions
         self.maxDepth = maxDepth
     }
@@ -24,9 +28,10 @@ public struct ScanPolicy: Sendable {
     public static let standard = ScanPolicy(
         skippedEverywhere: ["node_modules", "Pods", "DerivedData", "Carthage", "__pycache__", "venv", "bower_components"],
         skippedInProjects: ["build", "dist", "target", "vendor", "out", "xcuserdata"],
-        packageExtensions: ["app", "xcodeproj", "xcworkspace", "xcassets", "xcarchive", "photoslibrary", "musiclibrary",
-                            "tvlibrary", "imovielibrary", "bundle", "framework", "rtfd", "pages", "numbers", "key",
-                            "sketch", "playground", "lproj", "xcdatamodeld", "dSYM"],
+        packageExtensions: ["app", "xcodeproj", "xcworkspace", "xcassets", "xcarchive", "musiclibrary", "tvlibrary",
+                            "imovielibrary", "bundle", "framework", "rtfd", "pages", "numbers", "key", "sketch",
+                            "playground", "lproj", "xcdatamodeld", "dSYM"],
+        sealedExtensions: ["photoslibrary", "photolibrary", "migratedphotolibrary", "aplibrary"],
         screenCaptureExtensions: ["png", "jpg", "jpeg", "heic", "mov", "mp4"],
         maxDepth: 24
     )
@@ -34,6 +39,11 @@ public struct ScanPolicy: Sendable {
     /// Dotfiles, Office's lock files ("~$report.docx") and Finder's custom-icon file.
     public func isHidden(_ name: String) -> Bool {
         name.hasPrefix(".") || name.hasPrefix("~$") || name == "Icon\r"
+    }
+
+    /// It's one of the libraries a scan must not even look at.
+    public func isSealed(_ name: String) -> Bool {
+        sealedExtensions.contains((name as NSString).pathExtension.lowercased())
     }
 
     public func skipsDirectory(named name: String, inProject: Bool) -> Bool {
@@ -44,6 +54,7 @@ public struct ScanPolicy: Sendable {
     public func ignoresChange(at path: String) -> Bool {
         path.split(separator: "/").contains { component in
             component.hasPrefix(".") || skippedEverywhere.contains(String(component)) || component == "build"
+                || isSealed(String(component))
         }
     }
 }

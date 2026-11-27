@@ -199,6 +199,45 @@ video("Movies/family/WhatsApp Video 2026-08-02 at 6.10.11 PM.mp4", width: 720, h
 
 // MARK: - Projects and other files
 
+/// An app's icon: a rounded square of color with a white symbol on it.
+func appIcon(_ path: String, pixels: Int, color: NSColor, symbol: String, days: Double) {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels, bitsPerSample: 8, samplesPerPixel: 4,
+                               hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    let side = CGFloat(pixels)
+    let shape = NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: side, height: side), xRadius: side * 0.22, yRadius: side * 0.22)
+    NSGradient(starting: color, ending: color.blended(withFraction: 0.35, of: .black) ?? color)?.draw(in: shape, angle: -90)
+    let configuration = NSImage.SymbolConfiguration(pointSize: side * 0.5, weight: .semibold)
+        .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
+    if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) {
+        let size = image.size
+        image.draw(in: NSRect(x: (side - size.width) / 2, y: (side - size.height) / 2, width: size.width, height: size.height))
+    }
+    NSGraphicsContext.restoreGraphicsState()
+    try? rep.representation(using: .png, properties: [:])?.write(to: url(path))
+    age(path, days: days)
+}
+
+// An Xcode app, an Android app and a website keep their icon where their tools expect it.
+write("Documents/code/pocket-notes/PocketNotes.xcodeproj/project.pbxproj", "// !$*UTF8*$!\n", days: 4)
+write("Documents/code/pocket-notes/PocketNotes/App.swift", "import SwiftUI\n", days: 4)
+write("Documents/code/pocket-notes/PocketNotes/Assets.xcassets/AppIcon.appiconset/Contents.json", "{}", days: 4)
+appIcon("Documents/code/pocket-notes/PocketNotes/Assets.xcassets/AppIcon.appiconset/icon_64.png", pixels: 64,
+        color: .systemYellow, symbol: "note.text", days: 4)
+appIcon("Documents/code/pocket-notes/PocketNotes/Assets.xcassets/AppIcon.appiconset/icon_512.png", pixels: 512,
+        color: .systemYellow, symbol: "note.text", days: 4)
+write("Documents/code/trail-android/build.gradle", "plugins { id 'com.android.application' }\n", days: 20)
+write("Documents/code/trail-android/app/src/main/java/Main.kt", "fun main() {}\n", days: 20)
+appIcon("Documents/code/trail-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png", pixels: 192,
+        color: .systemGreen, symbol: "figure.hiking", days: 20)
+appIcon("Documents/code/web-shop/public/favicon.png", pixels: 192, color: .systemPink, symbol: "cart.fill", days: 35)
+// These have no icon of their own: the mark of their technology stands for them.
+write("Documents/code/data-scripts/pyproject.toml", "[project]\nname = \"data-scripts\"\n", days: 50)
+write("Documents/code/data-scripts/clean.py", "print('clean')\n", days: 50)
+write("Documents/code/dotfiles/.git/HEAD", "ref: refs/heads/main\n", days: 300)
+write("Documents/code/dotfiles/zshrc.txt", "export EDITOR=nano\n", days: 300)
+
 write("Documents/code/acme-app/Package.swift", "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"AcmeApp\")\n", days: 2)
 write("Documents/code/acme-app/.git/HEAD", "ref: refs/heads/main\n", days: 2)
 write("Documents/code/acme-app/Sources/AcmeApp/main.swift", "print(\"Hello from Acme\")\n", days: 2)

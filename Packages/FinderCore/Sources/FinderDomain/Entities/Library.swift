@@ -50,6 +50,7 @@ public struct EnrichmentStages: OptionSet, Sendable, Hashable {
     public static let imageUnderstanding = EnrichmentStages(rawValue: 1 << 4)
     public static let documentUnderstanding = EnrichmentStages(rawValue: 1 << 5)
     public static let videoUnderstanding = EnrichmentStages(rawValue: 1 << 6)
+    public static let projectArtwork = EnrichmentStages(rawValue: 1 << 7)
 }
 
 /// What was learned about a file the last time it was enriched, valid while its size and date stay.
@@ -58,13 +59,16 @@ public struct CachedEnrichment: Sendable, Equatable {
     public var modified: Date
     public var classification: Classification
     public var detail: String
+    public var artworkPath: String?
     public var stages: EnrichmentStages
 
-    public init(size: Int64, modified: Date, classification: Classification, detail: String, stages: EnrichmentStages) {
+    public init(size: Int64, modified: Date, classification: Classification, detail: String, artworkPath: String? = nil,
+                stages: EnrichmentStages) {
         self.size = size
         self.modified = modified
         self.classification = classification
         self.detail = detail
+        self.artworkPath = artworkPath
         self.stages = stages
     }
 

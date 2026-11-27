@@ -12,9 +12,15 @@ struct ItemCollection: NSViewRepresentable {
     let snippets: [String: String]
     let layout: BrowserLayout
     let tileSize: Double
+    /// Groups whose items are folded away; their header stays.
+    let collapsed: Set<SectionKey>
     @Binding var selection: Set<String>
     let thumbnails: any ThumbnailProviding
     let files: any FileActing
+    /// A group's header was clicked; `true` when every group should follow it (Option-click).
+    let onToggleSection: (SectionKey, Bool) -> Void
+    /// The user asked to move the selection to the Trash.
+    let onTrashRequest: () -> Void
 
     func makeCoordinator() -> ItemCollectionController {
         ItemCollectionController(thumbnails: thumbnails, files: files)
@@ -27,8 +33,10 @@ struct ItemCollection: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let controller = context.coordinator
         controller.onSelectionChange = { selection = $0 }
+        controller.onToggleSection = onToggleSection
+        controller.onTrashRequest = onTrashRequest
         controller.update(sections: sections, revision: revision, snippets: snippets, layout: layout,
-                          tileSize: tileSize, selection: selection)
+                          tileSize: tileSize, collapsed: collapsed, selection: selection)
     }
 }
 
@@ -46,12 +54,17 @@ final class ItemCollectionController: NSObject, NSCollectionViewDataSource, NSCo
     private var snippets: [String: String] = [:]
     private var layout = BrowserLayout.grid
     private var tileSize: CGFloat = 0
+    private var collapsed: Set<SectionKey> = []
+    /// Where each item on show is; items of folded groups aren't in it.
     private var indexPaths: [String: IndexPath] = [:]
     var onSelectionChange: (Set<String>) -> Void = { _ in }
+    var onToggleSection: (SectionKey, Bool) -> Void = { _, _ in }
+    var onTrashRequest: () -> Void = {}
 
     private enum Metrics {
         static let rowHeight: CGFloat = 44
         static let headerHeight: CGFloat = 32
+        static let sectionInset = NSEdgeInsets(top: 6, left: 12, bottom: 14, right: 12)
         /// Room around a tile's thumbnail and under it, for the name and the caption.
         static let tilePadding = NSSize(width: 20, height: 62)
     }
@@ -85,18 +98,23 @@ final class ItemCollectionController: NSObject, NSCollectionViewDataSource, NSCo
     }
 
     func update(sections: [ItemSection], revision: Int, snippets: [String: String], layout: BrowserLayout,
-                tileSize: Double, selection: Set<String>) {
+                tileSize: Double, collapsed: Set<SectionKey>, selection: Set<String>) {
         let contentChanged = revision != self.revision || snippets != self.snippets
         let layoutChanged = layout != self.layout
         let sizeChanged = CGFloat(tileSize) != self.tileSize
+        let newlyCollapsed = collapsed.subtracting(self.collapsed)
+        let collapseChanged = collapsed != self.collapsed
         self.snippets = snippets
         self.layout = layout
         self.tileSize = CGFloat(tileSize)
+        self.collapsed = collapsed
         if contentChanged {
             self.sections = sections
             self.revision = revision
+        }
+        if contentChanged || collapseChanged {
             indexPaths.removeAll(keepingCapacity: true)
-            for (sectionIndex, section) in sections.enumerated() {
+            for (sectionIndex, section) in self.sections.enumerated() where !collapsed.contains(section.key) {
                 for (itemIndex, item) in section.items.enumerated() {
                     indexPaths[item.path] = IndexPath(item: itemIndex, section: sectionIndex)
                 }
@@ -104,17 +122,31 @@ final class ItemCollectionController: NSObject, NSCollectionViewDataSource, NSCo
         }
         if layoutChanged || sizeChanged {
             let isGrid = layout == .grid
-            flowLayout.sectionInset = NSEdgeInsets(top: 6, left: 12, bottom: 14, right: 12)
             flowLayout.minimumInteritemSpacing = isGrid ? 4 : 0
             flowLayout.minimumLineSpacing = isGrid ? 6 : 0
         }
-        if contentChanged || layoutChanged {
+        if contentChanged || layoutChanged || collapseChanged {
             collectionView.reloadData()
         } else if sizeChanged {
             flowLayout.invalidateLayout()
             reconfigureVisibleItems()
         }
+        if !contentChanged, !newlyCollapsed.isEmpty {
+            keepHeaderInView(of: newlyCollapsed)
+        }
         apply(selection)
+    }
+
+    /// Folding a group from its pinned header, deep inside it, would leave the list showing whatever
+    /// slid up into that place: go to the folded group's header instead.
+    private func keepHeaderInView(of keys: Set<SectionKey>) {
+        guard let section = sections.firstIndex(where: { keys.contains($0.key) }) else { return }
+        collectionView.layoutSubtreeIfNeeded()
+        let header = flowLayout.layoutAttributesForSupplementaryView(ofKind: NSCollectionView.elementKindSectionHeader,
+                                                                     at: IndexPath(item: 0, section: section))
+        if let header, header.frame.minY < collectionView.visibleRect.minY {
+            collectionView.scroll(NSPoint(x: 0, y: header.frame.minY))
+        }
     }
 
     // MARK: - Data source
@@ -124,7 +156,7 @@ final class ItemCollectionController: NSObject, NSCollectionViewDataSource, NSCo
     }
 
     func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int) -> Int {
-        sections[section].items.count
+        collapsed.contains(sections[section].key) ? 0 : sections[section].items.count
     }
 
     func collectionView(_ collectionView: NSCollectionView, itemForRepresentedObjectAt indexPath: IndexPath) -> NSCollectionViewItem {
@@ -139,7 +171,10 @@ final class ItemCollectionController: NSObject, NSCollectionViewDataSource, NSCo
         let view = collectionView.makeSupplementaryView(ofKind: kind, withIdentifier: SectionHeaderView.identifier, for: indexPath)
         if let header = view as? SectionHeaderView {
             let section = sections[indexPath.section]
-            header.configure(title: section.key.title, count: section.items.count)
+            header.configure(title: section.key.title, count: section.items.count, isCollapsed: collapsed.contains(section.key)) {
+                [weak self] everyGroup in
+                self?.onToggleSection(section.key, everyGroup)
+            }
         }
         return view
     }
@@ -168,7 +203,7 @@ final class ItemCollectionController: NSObject, NSCollectionViewDataSource, NSCo
         case .grid:
             NSSize(width: tileSize + Metrics.tilePadding.width, height: tileSize + Metrics.tilePadding.height)
         case .list:
-            NSSize(width: max(240, collectionView.bounds.width - flowLayout.sectionInset.left - flowLayout.sectionInset.right),
+            NSSize(width: max(240, collectionView.bounds.width - Metrics.sectionInset.left - Metrics.sectionInset.right),
                    height: Metrics.rowHeight)
         }
     }
@@ -177,6 +212,12 @@ final class ItemCollectionController: NSObject, NSCollectionViewDataSource, NSCo
                         referenceSizeForHeaderInSection section: Int) -> NSSize {
         // A list that isn't split into groups has nothing to title.
         sections[section].key == .all ? .zero : NSSize(width: 0, height: Metrics.headerHeight)
+    }
+
+    /// A folded group is just its header: no room kept for the items it doesn't show.
+    func collectionView(_ collectionView: NSCollectionView, layout collectionViewLayout: NSCollectionViewLayout,
+                        insetForSectionAt section: Int) -> NSEdgeInsets {
+        collapsed.contains(sections[section].key) ? NSEdgeInsetsZero : Metrics.sectionInset
     }
 
     // MARK: - Selection
@@ -224,6 +265,11 @@ final class ItemCollectionController: NSObject, NSCollectionViewDataSource, NSCo
         files.copyPaths(selectedItems)
     }
 
+    @objc func trashSelection() {
+        guard !selectedItems.isEmpty else { return }
+        onTrashRequest()
+    }
+
     @objc func togglePreview() {
         guard let panel = QLPreviewPanel.shared() else { return }
         if panel.isVisible {
@@ -235,14 +281,16 @@ final class ItemCollectionController: NSObject, NSCollectionViewDataSource, NSCo
 
     func contextMenu() -> NSMenu {
         let menu = NSMenu()
-        func add(_ title: String, _ action: Selector) {
-            menu.addItem(withTitle: title, action: action, keyEquivalent: "").target = self
+        func add(_ title: String, _ action: Selector, key: String = "") {
+            menu.addItem(withTitle: title, action: action, keyEquivalent: key).target = self
         }
         add(String(localized: "Open"), #selector(openSelection))
         add(String(localized: "Quick Look"), #selector(togglePreview))
         menu.addItem(.separator())
         add(String(localized: "Show in Finder"), #selector(revealSelection))
         add(String(localized: "Copy Path"), #selector(copySelectionPaths))
+        menu.addItem(.separator())
+        add(String(localized: "Move to Trash"), #selector(trashSelection), key: "\u{8}")
         return menu
     }
 
@@ -278,6 +326,7 @@ final class FinderCollectionView: NSCollectionView {
 
     private enum KeyCode {
         static let returnKey: UInt16 = 36
+        static let delete: UInt16 = 51
         static let downArrow: UInt16 = 125
     }
 
@@ -287,6 +336,8 @@ final class FinderCollectionView: NSCollectionView {
         } else if event.keyCode == KeyCode.returnKey
                     || (event.keyCode == KeyCode.downArrow && event.modifierFlags.contains(.command)) {
             controller?.openSelection()
+        } else if event.keyCode == KeyCode.delete, event.modifierFlags.contains(.command) {
+            controller?.trashSelection()
         } else {
             super.keyDown(with: event)
         }

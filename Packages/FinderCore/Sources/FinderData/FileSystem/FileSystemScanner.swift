@@ -2,7 +2,8 @@ import Foundation
 import FinderDomain
 
 /// Walks the user's folders with FileManager. Packages count as one item, projects are found by
-/// their markers, and what the policy skips (dependencies, build output, hidden files) is never entered.
+/// their markers, and what the policy skips (dependencies, build output, hidden files, the Photos
+/// library) is never entered.
 public struct FileSystemScanner: LibraryScanning {
     private let policy: ScanPolicy
 
@@ -78,7 +79,8 @@ private final class Walk {
         }
         for url in entries {
             let name = url.lastPathComponent
-            if policy.isHidden(name) { continue }
+            // Decided by the name alone: a sealed library isn't asked anything, not even its attributes.
+            if policy.isHidden(name) || policy.isSealed(name) { continue }
             guard let values = try? url.resourceValues(forKeys: Self.keySet), values.isSymbolicLink != true else { continue }
             let path = folder + "/" + name
             let ext = (name as NSString).pathExtension.lowercased()

@@ -10,6 +10,16 @@ protocol ThumbnailProviding: AnyObject {
     func thumbnail(for item: FileItem, side: CGFloat, scale: CGFloat) async -> NSImage?
 }
 
+/// Thumbnails are made at a few sizes, so dragging the size slider doesn't make new ones at each step.
+enum ThumbnailSize {
+    private static let buckets: [CGFloat] = [48, 128, 256, 512]
+
+    /// The size a thumbnail is made at to be shown with this side.
+    static func bucket(for side: CGFloat) -> CGFloat {
+        buckets.first { $0 >= side } ?? buckets[buckets.count - 1]
+    }
+}
+
 /// Lets a request be cancelled from wherever the task is cancelled: the generator's `cancel` is safe
 /// to call from any thread, and the request is only read.
 private nonisolated struct PendingRequest: @unchecked Sendable {
@@ -25,19 +35,17 @@ private nonisolated struct PendingRequest: @unchecked Sendable {
 final class QuickLookThumbnailProvider: ThumbnailProviding {
     private let cache = NSCache<NSString, NSImage>()
     private let generator = QLThumbnailGenerator.shared
-    /// Thumbnails are made at these sizes, so dragging the size slider doesn't regenerate each step.
-    private static let buckets: [CGFloat] = [48, 128, 256, 512]
 
     init() {
         cache.countLimit = 3000
     }
 
     func cachedThumbnail(for item: FileItem, side: CGFloat) -> NSImage? {
-        cache.object(forKey: key(for: item, bucket: Self.bucket(for: side)))
+        cache.object(forKey: key(for: item, bucket: ThumbnailSize.bucket(for: side)))
     }
 
     func thumbnail(for item: FileItem, side: CGFloat, scale: CGFloat) async -> NSImage? {
-        let bucket = Self.bucket(for: side)
+        let bucket = ThumbnailSize.bucket(for: side)
         let key = key(for: item, bucket: bucket)
         if let cached = cache.object(forKey: key) { return cached }
         let request = QLThumbnailGenerator.Request(fileAt: URL(fileURLWithPath: item.path), size: CGSize(width: bucket, height: bucket),
@@ -57,9 +65,5 @@ final class QuickLookThumbnailProvider: ThumbnailProviding {
 
     private func key(for item: FileItem, bucket: CGFloat) -> NSString {
         "\(item.path)|\(item.modified.timeIntervalSinceReferenceDate)|\(Int(bucket))" as NSString
-    }
-
-    private static func bucket(for side: CGFloat) -> CGFloat {
-        buckets.first { $0 >= side } ?? buckets[buckets.count - 1]
     }
 }

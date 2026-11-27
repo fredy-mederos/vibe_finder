@@ -126,6 +126,10 @@ import Testing
         #expect(policy.skipsDirectory(named: "node_modules", inProject: false))
         #expect(policy.skipsDirectory(named: "build", inProject: true))
         #expect(!policy.skipsDirectory(named: "build", inProject: false))
+        #expect(policy.isSealed("Photos Library.photoslibrary"))
+        #expect(!policy.isSealed("Holiday.pages"))
+        // The Photos app writes into its library all day: none of it concerns the index.
+        #expect(policy.ignoresChange(at: "/Users/me/Pictures/Photos Library.photoslibrary/database/Photos.sqlite-wal"))
         #expect(policy.ignoresChange(at: "/Users/me/Documents/app/.git/index"))
         #expect(!policy.ignoresChange(at: "/Users/me/Documents/app/notes.txt"))
     }

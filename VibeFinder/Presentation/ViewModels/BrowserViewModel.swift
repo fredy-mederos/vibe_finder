@@ -69,6 +69,12 @@ final class BrowserViewModel {
     private(set) var resultRevision = 0
     /// The words around the match, for files found by their content.
     private(set) var snippets: [String: String] = [:]
+    /// The groups the user folded away in each place, for as long as the app runs.
+    private var collapsedByPlace: [Place: Set<SectionKey>] = [:]
+    /// Items waiting for the user to confirm they go to the Trash; empty when nothing is asked.
+    var trashCandidates: [FileItem] = []
+    /// What the last move to the Trash couldn't move, until the user has been told.
+    var trashFailures: [TrashFailure] = []
 
     static let tileSizes: ClosedRange<Double> = 64...256
 
@@ -80,6 +86,13 @@ final class BrowserViewModel {
     @ObservationIgnored private var refreshGeneration = 0
     @ObservationIgnored private var nameToSelect: String?
     @ObservationIgnored private var contentSearch: Task<Void, Never>?
+
+    /// Where a set of folded groups belongs. A search has its own, so a group folded while browsing
+    /// never hides matches.
+    private struct Place: Hashable {
+        let destination: Destination
+        let isSearching: Bool
+    }
 
     private enum Keys {
         static let arrangement = "browser.arrangement"
@@ -114,6 +127,60 @@ final class BrowserViewModel {
     /// Selects the first item whose name has this text, as soon as it's among the results.
     func selectWhenShown(nameContaining text: String) {
         nameToSelect = SearchTerms.fold(text)
+    }
+
+    // MARK: - Collapsing groups
+
+    private var place: Place { Place(destination: destination, isSearching: isSearching) }
+
+    /// The groups of the current list that are folded: their header stays, their items don't show.
+    var collapsedSections: Set<SectionKey> { collapsedByPlace[place] ?? [] }
+
+    /// A list that isn't split into groups (by name, by size) has nothing to fold.
+    var canCollapseSections: Bool { result.sections.contains { $0.key != .all } }
+
+    func toggleSection(_ key: SectionKey) {
+        setSections([key], collapsed: !collapsedSections.contains(key))
+    }
+
+    /// Every group does what the given one is about to do (an Option-click on its header).
+    func toggleAllSections(following key: SectionKey) {
+        setAllSectionsCollapsed(!collapsedSections.contains(key))
+    }
+
+    func setAllSectionsCollapsed(_ collapsed: Bool) {
+        setSections(result.sections.map(\.key).filter { $0 != .all }, collapsed: collapsed)
+    }
+
+    private func setSections(_ keys: [SectionKey], collapsed: Bool) {
+        var folded = collapsedSections
+        if collapsed {
+            folded.formUnion(keys)
+            // What can't be seen isn't selected.
+            let hidden = result.sections.lazy.filter { keys.contains($0.key) }.flatMap(\.items).map(\.path)
+            selection.subtract(hidden)
+        } else {
+            folded.subtract(keys)
+        }
+        collapsedByPlace[place] = folded
+    }
+
+    // MARK: - Trash
+
+    /// Asks before anything moves: the view shows the question while there are candidates.
+    func requestTrashOfSelection() {
+        trashCandidates = selectedItems.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    func confirmTrash() {
+        let items = trashCandidates
+        trashCandidates = []
+        guard !items.isEmpty else { return }
+        Task {
+            let outcome = await library.moveToTrash(items)
+            selection.subtract(items.map(\.path))
+            trashFailures = outcome.failures
+        }
     }
 
     // MARK: - Results

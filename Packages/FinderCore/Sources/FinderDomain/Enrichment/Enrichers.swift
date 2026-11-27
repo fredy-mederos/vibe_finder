@@ -96,6 +96,25 @@ public struct MediaMetadataEnricher: ItemEnricher {
     }
 }
 
+/// The picture a project goes by: its app's icon or its site's favicon, found where its tools keep it.
+public struct ProjectArtworkEnricher: ItemEnricher {
+    private let finder: any ProjectArtworkFinding
+
+    public init(finder: any ProjectArtworkFinding) {
+        self.finder = finder
+    }
+
+    public let stage: EnrichmentStages = .projectArtwork
+
+    public func applies(to item: FileItem) -> Bool {
+        item.kind == .projects
+    }
+
+    public func enrich(_ draft: inout EnrichmentDraft) async {
+        draft.item.artworkPath = finder.artworkPath(forProjectAt: draft.item.path)
+    }
+}
+
 /// The text of documents, notes, code and tables, for content search.
 public struct TextContentEnricher: ItemEnricher {
     private let extractor: any TextExtracting

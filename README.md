@@ -11,7 +11,12 @@ content, with thumbnails, and search them by name or by the text inside.
 ## What it shows
 
 - **Work**: Projects (the folders of your code projects, by type: Xcode, Swift Package, Gradle, Node…)
-  and Apps.
+  and Apps. Each project's folder carries its own picture, its app's icon or its site's favicon, found
+  where its tools keep it, with a small mark of its technology; a project without one gets the mark
+  alone. So projects can be told apart at a glance.
+
+  ![Projects: each folder with its app's icon and a mark of its technology](screenshots/projects.png)
+
 - **Pictures**: Photos, Screenshots (Mac, iPhone, iOS Simulator, Android…) and other Images.
 - **Video**: Videos, Screen Recordings and Music Videos.
 - **Audio**: Music, and Recordings & Sounds.
@@ -19,10 +24,17 @@ content, with thumbnails, and search them by name or by the text inside.
 - **Files**: Archives, Installers, Design files, Fonts, loose Code, Keys & Certificates and the rest.
 
 The overview shows how much there is of each kind and the latest few. Each kind opens as a grid of
-thumbnails or a list, grouped by date, type or folder, with its subkinds as one-click filters. The
-bar at the bottom tells where the selected file lives and how it was recognized. Space previews with
-Quick Look, double-click opens, right-click reveals in Finder, and items can be dragged out to other
-apps.
+thumbnails or a list, grouped by date, type or folder, with its subkinds as one-click filters. A
+click on a group's header collapses it (Option-click does it for every group), so a long list
+becomes a short table of contents. The bar at the bottom tells where the selected file lives and how
+it was recognized. Space previews with Quick Look, double-click opens, right-click reveals in Finder,
+and items can be dragged out to other apps.
+
+![Screenshots as a grid, grouped by date, with one group collapsed](screenshots/screenshots.png)
+
+The only thing Vibe Finder can change is what you tell it to: Move to Trash (the trash button, the
+context menu or Command-Delete) asks first and sends the selection to the Trash, where it can be put
+back from. Nothing is ever deleted for good.
 
 Search looks at names and at contents: the text of documents, PDFs, notes and code, and the text read
 from screenshots and images.
@@ -54,7 +66,8 @@ scripts/install.sh
 ```
 
 The first launch asks for permission to read Documents, Desktop and Downloads. Folders are chosen in
-Settings.
+Settings, along with the appearance (like the system, light or dark). The Photos library is never
+listed or looked into, so the app never asks for access to your photos.
 
 ## Architecture
 

@@ -3,9 +3,19 @@ import FinderDomain
 
 struct SettingsView: View {
     let library: LibraryViewModel
+    let appearance: AppearanceModel
 
     var body: some View {
+        @Bindable var appearance = appearance
         Form {
+            Section {
+                Picker("Appearance", selection: $appearance.choice) {
+                    ForEach(AppAppearance.allCases) { choice in
+                        Text(choice.title).tag(choice)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
             FoldersSection(library: library)
             Section {
                 Toggle("Include apps from the Applications folders", isOn: binding(\.includesApplications))
