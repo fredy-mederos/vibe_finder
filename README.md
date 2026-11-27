@@ -75,6 +75,13 @@ Every answer is stored, so the same file keeps its kind until it changes. Everyt
 Mac: nothing is sent anywhere. The text reading, the models and the descriptions can each be turned
 off in Settings. Describing pictures needs macOS 27; documents are described on macOS 26 too.
 
+## Install
+
+Download `VibeFinder.dmg` from [the latest release](https://github.com/fredy-mederos/vibe_finder/releases/latest),
+open it and drag Vibe Finder into Applications. It's signed and notarized. Vibe Finder tells you when
+a new version is out (it asks GitHub for the newest release when it opens and once a day; that's the
+only request it ever makes), and Vibe Finder › Check for Updates… checks any time.
+
 ## Build
 
 Requires macOS 26 and Xcode 27.

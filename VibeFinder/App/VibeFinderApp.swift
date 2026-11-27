@@ -11,11 +11,11 @@ struct VibeFinderApp: App {
         }
         .defaultSize(width: 1280, height: 820)
         .commands {
-            LibraryCommands(library: container.library, browser: container.browser)
+            LibraryCommands(library: container.library, browser: container.browser, updater: container.updater)
         }
 
         Settings {
-            SettingsView(library: container.library, appearance: container.appearance)
+            SettingsView(library: container.library, appearance: container.appearance, updater: container.updater)
         }
     }
 }
@@ -23,9 +23,14 @@ struct VibeFinderApp: App {
 struct LibraryCommands: Commands {
     let library: LibraryViewModel
     let browser: BrowserViewModel
+    let updater: AppUpdater
 
     var body: some Commands {
         @Bindable var browser = browser
+        CommandGroup(after: .appInfo) {
+            Button(updater.isChecking ? "Checking for Updates…" : "Check for Updates…") { updater.checkFromMenu() }
+                .disabled(updater.isChecking)
+        }
         CommandGroup(after: .toolbar) {
             Picker("Layout", selection: $browser.layout) {
                 Text("as Grid").tag(BrowserLayout.grid).keyboardShortcut("1")

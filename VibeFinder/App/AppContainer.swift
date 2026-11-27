@@ -8,6 +8,7 @@ struct AppContainer {
     let library: LibraryViewModel
     let browser: BrowserViewModel
     let appearance: AppearanceModel
+    let updater: AppUpdater
     let inspectItem: InspectItem
     let thumbnails: any ThumbnailProviding
     let files: any FileActing
@@ -60,7 +61,10 @@ struct AppContainer {
         let browser = BrowserViewModel(library: library, arrange: ArrangeItems(), searchContent: SearchContent(index: index),
                                        preferences: preferences)
         options.apply(to: browser)
+        let updater = AppUpdater(defaults: preferences)
+        options.apply(to: updater)
         return AppContainer(library: library, browser: browser, appearance: AppearanceModel(preferences: preferences),
+                            updater: updater,
                             inspectItem: InspectItem(listing: FileSystemFolderListing(), texts: index, policy: policy),
                             thumbnails: ProjectThumbnailProvider(base: QuickLookThumbnailProvider()), files: WorkspaceFileActions())
     }
@@ -81,6 +85,8 @@ struct AppContainer {
 ///     -VFLayout list                     grid or list
 ///     -VFSelectItem "invoice"            select the first shown item with this in its name
 ///     -VFInspector YES                   open the inspector
+///     -VFCheckForUpdates YES             check for updates as an installed copy does at launch (debug builds don't)
+///     -VFUpdateRepository owner/name     …against another repository's releases
 struct LaunchOptions {
     var folders: [String]?
     var dataDirectory: URL?
@@ -89,6 +95,8 @@ struct LaunchOptions {
     var layout: BrowserLayout?
     var selectedName: String?
     var showsInspector: Bool?
+    var checksForUpdates = false
+    var updateRepository: String?
 
     static var current: LaunchOptions {
         let defaults = UserDefaults.standard
@@ -99,7 +107,9 @@ struct LaunchOptions {
             search: defaults.string(forKey: "VFSearch"),
             layout: defaults.string(forKey: "VFLayout").flatMap(BrowserLayout.init),
             selectedName: defaults.string(forKey: "VFSelectItem"),
-            showsInspector: defaults.object(forKey: "VFInspector") == nil ? nil : defaults.bool(forKey: "VFInspector")
+            showsInspector: defaults.object(forKey: "VFInspector") == nil ? nil : defaults.bool(forKey: "VFInspector"),
+            checksForUpdates: defaults.bool(forKey: "VFCheckForUpdates"),
+            updateRepository: defaults.string(forKey: "VFUpdateRepository")
         )
     }
 
@@ -109,5 +119,11 @@ struct LaunchOptions {
         if let search { browser.searchText = search }
         if let selectedName { browser.selectWhenShown(nameContaining: selectedName) }
         if let showsInspector { browser.showsInspector = showsInspector }
+    }
+
+    func apply(to updater: AppUpdater) {
+        #if DEBUG
+        if checksForUpdates || updateRepository != nil { updater.debugCheck(repository: updateRepository) }
+        #endif
     }
 }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Merged with the keys Xcode generates. -->
+	<!-- The commit an installed copy was built from, and when; scripts/install.sh and scripts/create_dmg.sh fill them in. -->
+	<key>VFBuildCommit</key>
+	<string>$(VF_BUILD_COMMIT)</string>
+	<key>VFBuildDate</key>
+	<string>$(VF_BUILD_DATE)</string>
+</dict>
+</plist>

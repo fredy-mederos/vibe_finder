@@ -4,6 +4,30 @@ import FinderDomain
 struct SettingsView: View {
     let library: LibraryViewModel
     let appearance: AppearanceModel
+    let updater: AppUpdater
+
+    var body: some View {
+        TabView {
+            Tab("General", systemImage: "gearshape") {
+                GeneralSettings(library: library, appearance: appearance)
+            }
+            Tab("About", systemImage: "info.circle") {
+                Form {
+                    AboutSection()
+                    UpdatesSection(updater: updater)
+                }
+                .formStyle(.grouped)
+            }
+        }
+        // A fixed size the forms scroll in: with many folders the list would grow past the screen.
+        .frame(width: 540, height: 560)
+    }
+}
+
+/// What's indexed, what's shown and how files are understood.
+private struct GeneralSettings: View {
+    let library: LibraryViewModel
+    let appearance: AppearanceModel
 
     var body: some View {
         @Bindable var appearance = appearance
@@ -38,12 +62,10 @@ struct SettingsView: View {
             } header: {
                 Text("Understanding Files")
             } footer: {
-                Text("File types and naming conventions always decide first. Everything runs on this Mac; nothing is sent anywhere.")
+                Text("File types and naming conventions always decide first. Everything about your files runs on this Mac; nothing about them is sent anywhere.")
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520)
-        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func binding(_ keyPath: WritableKeyPath<LibrarySettings, Bool>) -> Binding<Bool> {

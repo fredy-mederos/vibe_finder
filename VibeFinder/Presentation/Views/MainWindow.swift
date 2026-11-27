@@ -19,9 +19,12 @@ struct MainWindow: View {
         }
         .task {
             container.library.start()
+            container.updater.start()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             container.library.appDidBecomeActive()
+            // A new version found while the app was in the background is announced when it comes to the front.
+            container.updater.announceIfNew()
         }
         .frame(minWidth: 820, minHeight: 480)
     }

@@ -79,10 +79,11 @@ asks the index for it when that step didn't run this time.
 
 Answers are stored in the index with the file's size and date and reused until the file changes, so
 the same file keeps its kind. `ClassificationSource` records which of these decided, and the UI shows
-it. When a rule, policy or prompt changes what it would answer, the stored answers have to be worked
+it. Nothing about the user's files leaves the Mac: don't add network calls (the update check, which
+only asks GitHub for the newest release, is the one exception). When a rule, policy or prompt changes what it would answer, the stored answers have to be worked
 out again: give that step a new bit in `EnrichmentStages` and it alone runs again, or bump
 `EnrichmentRules.version` to drop everything (that re-reads the text of every image, which takes
-minutes on a real library, so only when the change is across the board). Nothing leaves the Mac; don't add network calls.
+minutes on a real library, so only when the change is across the board).
 
 ## Working on it
 
@@ -125,8 +126,23 @@ minutes on a real library, so only when the change is across the board). Nothing
   is the `InspectItem` use case, run off the main thread when the selection changes.
 - Collapsed groups are view state (`BrowserViewModel.collapsedSections`, per place, kept while the
   app runs). A folded group still has its header and count; its items aren't selected.
-- `scripts/install.sh` builds Release into ~/Applications. `scripts/make-icon.swift` draws the icon
-  into the asset catalog.
+- `scripts/make-icon.swift` draws the icon into the asset catalog.
+- **"Prepare a release"** is the owner's shorthand, as in his other apps, for: commit and push any
+  pending work first (so the build isn't marked with `+`), then run `scripts/install.sh /Applications`,
+  which builds Release, replaces /Applications/Vibe Finder.app (quitting the running copy) and opens
+  it. Report the version, build number and commit it was built from (Settings › About shows them too).
+  It doesn't mean tagging or publishing anything.
+- **Publishing a release** (a signed, notarized `VibeFinder.dmg` on GitHub) is the `release-vibe-finder`
+  skill in `skills/` (linked from `.claude/skills`): version (`scripts/version.sh`), Developer ID build
+  and notarization (`scripts/release.sh`), tag and `gh release create` with `scripts/release-notes.sh`.
+  Only when asked to release or publish; "prepare a release" never does.
+- Installed copies check GitHub for the newest release (`App/AppUpdater.swift`): at launch (at most
+  hourly), daily, and from Vibe Finder › Check for Updates… and Settings › About, which shows the same
+  About and Updates rows as the owner's other apps. `App/UpdateCheck.swift` is the same file in Vibe
+  GitTree, Vibe Notepad and Vibe Clean, word for word: keep them identical, which is why it isn't
+  split into the package's layers. Debug builds check only when asked (`-VFCheckForUpdates YES`, or
+  `-VFUpdateRepository owner/name` to try another repository's releases). That request is the only
+  one the app makes, and it says nothing about the user's files.
 
 ## Text
 
