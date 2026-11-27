@@ -30,15 +30,11 @@ struct BrowserView: View {
                 )
             }
             Divider()
-            InfoBar(items: browser.selectedItems, total: browser.result.count, files: files) {
-                browser.requestTrashOfSelection()
-            }
+            InfoBar(items: browser.selectedItems, total: browser.result.count, files: files)
         }
         .inspector(isPresented: $browser.showsInspector) {
-            InspectorView(items: browser.selectedItems, inspectItem: inspectItem, thumbnails: thumbnails, files: files) {
-                browser.requestTrashOfSelection()
-            }
-            .inspectorColumnWidth(min: 260, ideal: 320, max: 480)
+            InspectorView(items: browser.selectedItems, inspectItem: inspectItem, thumbnails: thumbnails, files: files)
+                .inspectorColumnWidth(min: 260, ideal: 320, max: 480)
         }
         .toolbar {
             BrowserToolbar(browser: browser)
@@ -203,17 +199,14 @@ private struct InfoBar: View {
     let items: [FileItem]
     let total: Int
     let files: any FileActing
-    let trash: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
             if items.count == 1, let item = items.first {
                 SelectedItemInfo(item: item, files: files)
-                TrashButton(action: trash)
             } else if items.count > 1 {
                 Text("\(items.count) selected · \(items.reduce(Int64(0)) { $0 + $1.sizeOnDisk }.formattedFileSize)")
                 Spacer(minLength: 0)
-                TrashButton(action: trash)
             } else {
                 Text("\(total) items")
                 Spacer(minLength: 0)
@@ -224,19 +217,6 @@ private struct InfoBar: View {
         .lineLimit(1)
         .padding(.horizontal, 16)
         .frame(height: 30)
-    }
-}
-
-private struct TrashButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "trash")
-        }
-        .buttonStyle(.borderless)
-        .help("Move to Trash")
-        .accessibilityLabel("Move to Trash")
     }
 }
 

@@ -47,9 +47,9 @@ picture's dimensions, a recording's length, an app's version, where the file liv
 recognized, the text found inside a document or read in a screenshot, and for a project what its
 folder holds, as a short tree.
 
-The only thing Vibe Finder can change is what you tell it to: Move to Trash (the trash button, the
-context menu or Command-Delete) asks first and sends the selection to the Trash, where it can be put
-back from. Nothing is ever deleted for good.
+The only thing Vibe Finder can change is what you tell it to: Move to Trash, in the context menu
+of the selection (or Command-Delete), asks first and sends it to the Trash, where it can be put back
+from. Nothing is ever deleted for good, and there's no delete button to hit by accident.
 
 Search looks at names and at contents: the text of documents, PDFs, notes and code, and the text read
 from screenshots and images.

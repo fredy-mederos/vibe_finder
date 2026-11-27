@@ -9,16 +9,15 @@ struct InspectorView: View {
     let inspectItem: InspectItem
     let thumbnails: any ThumbnailProviding
     let files: any FileActing
-    let trash: () -> Void
 
     var body: some View {
         if items.count == 1, let item = items.first {
-            ItemInspector(item: item, inspectItem: inspectItem, thumbnails: thumbnails, files: files, trash: trash)
+            ItemInspector(item: item, inspectItem: inspectItem, thumbnails: thumbnails, files: files)
         } else if items.isEmpty {
             ContentUnavailableView("No Selection", systemImage: "sidebar.trailing",
                                    description: Text("Select an item to see its preview and details."))
         } else {
-            SelectionSummary(items: items, trash: trash)
+            SelectionSummary(items: items)
         }
     }
 }
@@ -30,7 +29,6 @@ private struct ItemInspector: View {
     let inspectItem: InspectItem
     let thumbnails: any ThumbnailProviding
     let files: any FileActing
-    let trash: () -> Void
 
     /// What's read off the main thread when the item changes: its text, or its folder's outline.
     @State private var text: String?
@@ -42,7 +40,7 @@ private struct ItemInspector: View {
                 ThumbnailImage(item: item, side: 220, thumbnails: thumbnails)
                     .frame(maxWidth: .infinity)
                 ItemHeading(item: item)
-                ItemActions(item: item, files: files, trash: trash)
+                ItemActions(item: item, files: files)
                 Divider()
                 ItemFacts(item: item)
                 if !outline.isEmpty {
@@ -87,21 +85,16 @@ private struct ItemHeading: View {
     }
 }
 
+/// Looking only: moving to the Trash stays in the list's context menu, out of reach of a stray click.
 private struct ItemActions: View {
     let item: FileItem
     let files: any FileActing
-    let trash: () -> Void
 
     var body: some View {
         HStack {
             Button("Open") { files.open([item]) }
             Button("Show in Finder") { files.revealInFinder([item]) }
             Spacer(minLength: 0)
-            Button(action: trash) {
-                Image(systemName: "trash")
-            }
-            .help("Move to Trash")
-            .accessibilityLabel("Move to Trash")
         }
         .controlSize(.small)
     }
@@ -232,7 +225,6 @@ private struct IndexedTextView: View {
 /// Several items at once: how many, what they weigh together and what they are.
 private struct SelectionSummary: View {
     let items: [FileItem]
-    let trash: () -> Void
 
     var body: some View {
         let kinds = Dictionary(grouping: items, by: \.kind).map { (kind: $0.key, count: $0.value.count) }
@@ -252,9 +244,6 @@ private struct SelectionSummary: View {
                 Label("\(entry.kind.title): \(entry.count)", systemImage: entry.kind.symbol)
                     .font(.callout)
             }
-            Divider()
-            Button("Move to Trash…", action: trash)
-                .controlSize(.small)
             Spacer(minLength: 0)
         }
         .padding(16)

@@ -92,8 +92,10 @@ minutes on a real library, so only when the change is across the board). Nothing
 - The app looks, it doesn't reorganize: it opens, previews, reveals and copies paths. The one
   exception is Move to Trash (`TrashItems`), which the user asked for: only on an explicit action,
   always after a confirmation, and only ever to the Trash (`ItemTrashing` has no way to delete for
-  good; don't add one). Don't add anything else that moves or renames the user's files unless the
-  user asks for that feature.
+  good; don't add one). It's offered in the list's context menu, with Command-Delete and the File
+  menu as its equivalents, and nowhere else: no trash button in the inspector, the info bar or the
+  toolbar (the owner asked, 2026-11-27). Don't add anything else that moves or renames the user's
+  files unless the user asks for that feature.
 - Libraries behind a privacy permission of their own (`ScanPolicy.sealedExtensions`: the Photos
   library) are never listed, never asked for a thumbnail and never watched: touching one makes macOS
   ask the user for access to their photos. If the app should ever show what's inside Photos, that's
