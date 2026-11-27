@@ -11,7 +11,7 @@ content, with thumbnails, and search them by name or by the text inside.
 ## What it shows
 
 - **Work**: Projects (the folders of your code projects) and Apps. Projects are sorted by what they're
-  for: iOS, Android, Mobile (cross-platform), Web, Server, Desktop, Games, Libraries & tools. That's
+  for: iOS, Android, Mobile (cross-platform), Web, Server, Desktop, Games, Libraries & tools, Docs. That's
   read from what each project declares (its Xcode project's platform, its Gradle plugins, the packages
   a `package.json` depends on…), and it's marked in the folder itself, the way the system marks
   Documents or Downloads. A project with a picture of its own (its app's icon, the icon its site

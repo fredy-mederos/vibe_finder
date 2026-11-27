@@ -506,6 +506,12 @@ private final class StubTrash: ItemTrashing {
         #expect(platform(root: [".git", "index.html"], existing: ["index.html"]) == .web)
         #expect(platform(root: [".git", "CMakeLists.txt"]) == .library)
         #expect(platform(root: [".git", "notes.txt"]) == .other)
+        // Apps kept one folder down, each in its platform's folder.
+        #expect(platform(root: [".git", "ios", "README.md"], existing: ["ios"]) == .iOS)
+        #expect(platform(root: [".git", "ios", "android"], existing: ["ios", "android"]) == .mobile)
+        // Writing and nothing but writing.
+        #expect(platform(root: [".git", "README.md", "specs", "research"]) == .docs)
+        #expect(platform(root: [".git", "README.md", "deploy.sh"]) == .other)
     }
 
     @Test func readingAProjectSettlesWhereItGoes() async {

@@ -3,7 +3,7 @@ import Foundation
 /// What a code project is for, which is how projects are told apart: the app someone runs on a
 /// phone, a website, a server… The tool it's built with (Xcode, Gradle, Node) is a detail next to it.
 public enum ProjectPlatform: String, CaseIterable, Sendable {
-    case iOS, android, mobile, web, server, desktop, game, library, other
+    case iOS, android, mobile, web, server, desktop, game, library, docs, other
 
     /// The subkind projects of this platform are listed under.
     public var subkind: String {
@@ -16,6 +16,7 @@ public enum ProjectPlatform: String, CaseIterable, Sendable {
         case .desktop: "Desktop"
         case .game: "Games"
         case .library: "Libraries & tools"
+        case .docs: "Docs"
         case .other: "Other"
         }
     }
@@ -126,11 +127,32 @@ public enum ProjectPlatformRules {
         if facts.manifests["composer.json"] != nil {
             return .server
         }
+        // Nothing at the root says, but the apps are one folder down, each in its platform's.
+        switch (facts.existing.contains("ios"), facts.existing.contains("android")) {
+        case (true, true): return .mobile
+        case (true, false): return .iOS
+        case (false, true): return .android
+        case (false, false): break
+        }
         // No manifest at all, but a page to open: a site kept as plain files.
         if hasIndexPage(facts) {
             return .web
         }
-        return facts.rootEntries.contains("CMakeLists.txt") ? .library : .other
+        if facts.rootEntries.contains("CMakeLists.txt") {
+            return .library
+        }
+        return isWriting(facts) ? .docs : .other
+    }
+
+    private static let codeExtensions: Set<String> = [
+        "js", "ts", "py", "rb", "go", "rs", "java", "kt", "swift", "c", "cc", "cpp", "h", "m", "cs", "php", "html", "css",
+        "sh", "groovy", "sql", "lua", "dart",
+    ]
+
+    /// A repository of writing (notes, specs, guides): Markdown at its root and no code next to it.
+    private static func isWriting(_ facts: ProjectFacts) -> Bool {
+        let extensions = facts.rootEntries.map { ($0 as NSString).pathExtension.lowercased() }
+        return extensions.contains("md") && codeExtensions.isDisjoint(with: extensions)
     }
 
     // MARK: - By tool

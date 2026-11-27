@@ -30,7 +30,9 @@ public extension ItemEnricher {
 }
 
 /// What enrichment learns is stored per file and reused while the file doesn't change. Bump this
-/// when a policy or a step changes what it would answer, so stored answers are worked out again.
+/// when policies change what they would answer across the board: every stored answer is dropped and
+/// worked out again, text reading included. When only one step's rules change, give that step a new
+/// bit in `EnrichmentStages` instead: it alone runs again.
 public enum EnrichmentRules {
     public static let version = 1
 }

@@ -19,6 +19,7 @@ enum ProjectMark {
         case .desktop: .symbol("desktopcomputer")
         case .game: .symbol("gamecontroller.fill")
         case .library: .symbol("shippingbox.fill")
+        case .docs: .symbol("doc.text.fill")
         case .other: .symbol("chevron.left.forwardslash.chevron.right")
         }
     }

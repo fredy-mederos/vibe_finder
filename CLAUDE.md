@@ -49,7 +49,7 @@ SOLID, concretely:
 
 Projects follow the same idea. The scanner finds them by their tool's marker (`ProjectMarkers`:
 Xcode, Gradle, Node…), and that tool is only a detail next to the name. What a project is *for* is
-its subkind (`ProjectPlatform`: iOS, Android, Mobile, Web, Server, Desktop, Games, Libraries & tools),
+its subkind (`ProjectPlatform`: iOS, Android, Mobile, Web, Server, Desktop, Games, Libraries & tools, Docs),
 decided by `ProjectPlatformRules` from the few manifests `FileSystemProjectInspector` reads: a new
 framework is one more name in those lists, with a test. A project's picture (`ProjectArtworkRules`)
 comes only from places tools themselves keep or name an icon: an asset catalog's app icon, an Android
@@ -62,8 +62,10 @@ here; don't bundle third-party logos.
 
 Answers are stored in the index with the file's size and date and reused until the file changes, so
 the same file keeps its kind. `ClassificationSource` records which of these decided, and the UI shows
-it. When a rule, policy or prompt changes what it would answer, bump `EnrichmentRules.version`: the
-stored answers are dropped and worked out again. Nothing leaves the Mac; don't add network calls.
+it. When a rule, policy or prompt changes what it would answer, the stored answers have to be worked
+out again: give that step a new bit in `EnrichmentStages` and it alone runs again, or bump
+`EnrichmentRules.version` to drop everything (that re-reads the text of every image, which takes
+minutes on a real library, so only when the change is across the board). Nothing leaves the Mac; don't add network calls.
 
 ## Working on it
 
