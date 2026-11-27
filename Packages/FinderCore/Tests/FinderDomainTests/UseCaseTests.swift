@@ -343,12 +343,23 @@ private struct StubArtworkFinder: ProjectArtworkFinding {
         #expect(ProjectArtworkRules.score(fileName: "Contents.json", folderName: "AppIcon.appiconset") == nil)
         // Adaptive icons are XML: nothing to show.
         #expect(ProjectArtworkRules.score(fileName: "ic_launcher.xml", folderName: "mipmap-anydpi-v26") == nil)
-        #expect(ProjectArtworkRules.score(fileName: "ic_launcher_foreground.png", folderName: "mipmap-xxxhdpi") == nil)
+        #expect(ProjectArtworkRules.score(fileName: "ic_launcher_background.png", folderName: "mipmap-xxxhdpi") == nil)
         // A generic name only counts where a project's own assets live, or at its root.
         #expect(ProjectArtworkRules.score(fileName: "icon.png", folderName: "screenshots") == nil)
         #expect(ProjectArtworkRules.score(fileName: "icon.png", folderName: "") != nil)
         #expect(ProjectArtworkRules.score(fileName: "logo.svg", folderName: "assets") != nil)
         #expect(ProjectArtworkRules.score(fileName: "photo.png", folderName: "public") == nil)
+    }
+
+    @Test func androidIconsFromBestToLast() {
+        // The store's 512-pixel icon, then the flat launcher icon, then an adaptive icon's foreground alone.
+        let store = ProjectArtworkRules.score(fileName: "ic_launcher-playstore.png", folderName: "main")
+        let launcher = ProjectArtworkRules.score(fileName: "ic_launcher.png", folderName: "mipmap-xxxhdpi")
+        let foreground = ProjectArtworkRules.score(fileName: "ic_launcher_foreground.webp", folderName: "mipmap-xxxhdpi")
+        let scores = [store, launcher, foreground].compactMap { $0 }
+        #expect(scores.count == 3)
+        #expect(scores == scores.sorted(by: >))
+        #expect(ProjectArtworkRules.score(fileName: "AppIcon.svg", folderName: "AppIcon.appiconset") != nil)
     }
 
     @Test func theBestCandidateNeverDependsOnTheOrderFound() {
@@ -437,9 +448,14 @@ private final class StubTrash: ItemTrashing {
 // MARK: - Project platform
 
 @Suite struct ProjectPlatformTests {
+    private func profile(root: Set<String> = [], manifests: [String: String] = [:], existing: Set<String> = [],
+                         xcode: String? = nil) -> ProjectProfile {
+        ProjectPlatformRules.profile(for: ProjectFacts(rootEntries: root, manifests: manifests, existing: existing, xcodeProject: xcode))
+    }
+
     private func platform(root: Set<String> = [], manifests: [String: String] = [:], existing: Set<String> = [],
                           xcode: String? = nil) -> ProjectPlatform {
-        ProjectPlatformRules.platform(for: ProjectFacts(rootEntries: root, manifests: manifests, existing: existing, xcodeProject: xcode))
+        profile(root: root, manifests: manifests, existing: existing, xcode: xcode).platform
     }
 
     private func package(_ dependencies: String, dev: String = "") -> [String: String] {
@@ -498,6 +514,47 @@ private final class StubTrash: ItemTrashing {
         #expect(platform(manifests: ["Package.swift": ".package(url: \"https://github.com/vapor/vapor.git\", from: \"4.0.0\")"]) == .server)
         #expect(platform(manifests: ["Package.swift": "let package = Package(name: \"Core\")"]) == .library)
         #expect(platform(manifests: ["pom.xml": "<artifactId>spring-boot-starter-web</artifactId>"]) == .server)
+    }
+
+    @Test func appsAndLibrariesAreToldApart() {
+        // Android: which plugin the build applies.
+        let androidLibrary = profile(manifests: ["build.gradle.kts": "plugins { id(\"com.android.library\") }"])
+        #expect(androidLibrary == ProjectProfile(platform: .android, role: .library))
+        #expect(androidLibrary.subkind == "Android libraries")
+        #expect(profile(manifests: ["build.gradle": "id 'com.android.application' apply false\nid 'com.android.library' apply false"]).role == .app)
+        // Xcode: what the targets build.
+        let framework = "SDKROOT = iphoneos; productType = \"com.apple.product-type.framework\";"
+        #expect(profile(xcode: framework).subkind == "iOS libraries")
+        #expect(profile(xcode: framework + " productType = \"com.apple.product-type.application\";").subkind == "iOS")
+        // Swift packages: the platforms they declare, and whether they build a program.
+        #expect(profile(manifests: ["Package.swift": "platforms: [.iOS(.v17)], targets: [.target(name: \"Kit\")]"]).subkind == "iOS libraries")
+        #expect(profile(manifests: ["Package.swift": "platforms: [.macOS(.v26)], targets: [.target(name: \"Core\")]"]).subkind == "Desktop libraries")
+        #expect(profile(manifests: ["Package.swift": "platforms: [.macOS(.v14)], targets: [.executableTarget(name: \"tool\")]"]).subkind == "Desktop")
+        // npm: a package others install says what it exports; an app is private.
+        let component = "{ \"name\": \"buttons\", \"exports\": \"./dist/index.js\", \"peerDependencies\": { \"react\": \"19\" } }"
+        #expect(profile(manifests: ["package.json": component]).subkind == "Web libraries")
+        let site = "{ \"private\": true, \"main\": \"index.js\", \"dependencies\": { \"react\": \"19\" } }"
+        #expect(profile(manifests: ["package.json": site]).subkind == "Web")
+        let middleware = "{ \"name\": \"auth\", \"types\": \"index.d.ts\", \"peerDependencies\": { \"express\": \"5\" } }"
+        #expect(profile(manifests: ["package.json": middleware]).subkind == "Server libraries")
+        // Flutter plugins, Rust crates and Go modules without a program.
+        #expect(profile(manifests: ["pubspec.yaml": "flutter:\n  plugin:\n    platforms:\n"], existing: ["android", "ios"]).subkind == "Mobile libraries")
+        #expect(profile(manifests: ["Cargo.toml": "axum = \"0.8\""], existing: ["src/lib.rs"]).subkind == "Server libraries")
+        #expect(profile(manifests: ["Cargo.toml": "axum = \"0.8\""], existing: ["src/lib.rs", "src/main.rs"]).subkind == "Server")
+        #expect(profile(manifests: ["go.mod": "require google.golang.org/grpc v1.70"]).subkind == "Server libraries")
+        #expect(profile(manifests: ["go.mod": "require google.golang.org/grpc v1.70"], existing: ["cmd"]).subkind == "Server")
+    }
+
+    @Test func aSubkindReadsBackAsItsProfile() {
+        for platform in ProjectPlatform.allCases {
+            for role in [ProjectRole.app, .library] {
+                let profile = ProjectProfile(platform: platform, role: role)
+                #expect(ProjectProfile(subkind: profile.subkind) == profile)
+            }
+        }
+        // Where libraries have no place of their own, there's only the platform.
+        #expect(ProjectProfile(platform: .game, role: .library).subkind == "Games")
+        #expect(ProjectProfile(subkind: "PNG") == nil)
     }
 
     @Test func gamesPlainSitesAndTheRest() {

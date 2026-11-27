@@ -96,7 +96,7 @@ public struct MediaMetadataEnricher: ItemEnricher {
     }
 }
 
-/// What a project is for (an iOS app, a website, a server…), from what its manifests declare.
+/// What a project is (an iOS app, an Android library, a website, a server…), from what its manifests declare.
 public struct ProjectPlatformEnricher: ItemEnricher {
     private let inspector: any ProjectInspecting
 
@@ -111,8 +111,8 @@ public struct ProjectPlatformEnricher: ItemEnricher {
     }
 
     public func enrich(_ draft: inout EnrichmentDraft) async {
-        let platform = ProjectPlatformRules.platform(for: inspector.facts(forProjectAt: draft.item.path))
-        draft.item.classification = Classification(kind: .projects, subkind: platform.subkind, source: .metadata)
+        let profile = ProjectPlatformRules.profile(for: inspector.facts(forProjectAt: draft.item.path))
+        draft.item.classification = Classification(kind: .projects, subkind: profile.subkind, source: .metadata)
     }
 }
 

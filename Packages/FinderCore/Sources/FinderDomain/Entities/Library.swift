@@ -52,8 +52,8 @@ public struct EnrichmentStages: OptionSet, Sendable, Hashable {
     public static let videoUnderstanding = EnrichmentStages(rawValue: 1 << 6)
     public static let projectArtwork = EnrichmentStages(rawValue: 1 << 7)
     /// A step whose rules changed gets a new bit, so that step alone runs again for what's indexed
-    /// (1 << 8 was the platform step's first set of rules).
-    public static let projectPlatform = EnrichmentStages(rawValue: 1 << 9)
+    /// (1 << 8 and 1 << 9 were the platform step's earlier sets of rules).
+    public static let projectPlatform = EnrichmentStages(rawValue: 1 << 10)
 }
 
 /// What was learned about a file the last time it was enriched, valid while its size and date stay.

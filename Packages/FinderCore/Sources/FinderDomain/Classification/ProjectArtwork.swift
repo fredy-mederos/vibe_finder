@@ -43,7 +43,7 @@ public enum ProjectArtworkRules {
     /// How deep under the project's root an icon is still looked for.
     public static let maxDepth = 7
 
-    private static let iconSetImages: Set<String> = ["png", "jpg", "jpeg"]
+    private static let iconSetImages: Set<String> = ["png", "jpg", "jpeg", "pdf", "svg"]
     private static let launcherNames: Set<String> = ["ic_launcher", "ic_launcher_round"]
     private static let launcherDensities = ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]
     /// Icons web projects ship for home screens, biggest first.
@@ -71,6 +71,15 @@ public enum ProjectArtworkRules {
         if folder.hasPrefix("mipmap-"), launcherNames.contains(stem), ext == "png" || ext == "webp" {
             let density = launcherDensities.firstIndex { folder == "mipmap-" + $0 } ?? -1
             return density < 0 ? nil : 85 + density
+        }
+        // The 512-pixel icon Android Studio writes for the store listing: the launcher icon at its best.
+        if name == "ic_launcher-playstore.png" {
+            return 95
+        }
+        // An adaptive icon's picture without its background, when there's no flat version of it.
+        if folder.hasPrefix("mipmap-"), stem == "ic_launcher_foreground", ext == "png" || ext == "webp" {
+            let density = launcherDensities.firstIndex { folder == "mipmap-" + $0 } ?? -1
+            return density < 0 ? nil : 66 + density
         }
         if let index = touchIcons.firstIndex(of: name) {
             return 79 - index

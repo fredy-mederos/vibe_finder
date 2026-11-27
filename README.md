@@ -15,8 +15,11 @@ content, with thumbnails, and search them by name or by the text inside.
   read from what each project declares (its Xcode project's platform, its Gradle plugins, the packages
   a `package.json` depends on…), and it's marked in the folder itself, the way the system marks
   Documents or Downloads. A project with a picture of its own (its app's icon, the icon its site
-  declares) shows it in a small circle at the folder's corner. So projects can be told apart at a
-  glance, and the tool each is built with (Xcode, Gradle, Node…) is next to its name.
+  declares) shows it in a small circle at the folder's corner. Libraries are told from apps the same
+  way (an Android library applies the library plugin, an npm package says what it exports, a Swift
+  package builds no program…): they're listed apart, as "Android libraries" or "Web libraries", and
+  carry a box in that circle. So projects can be told apart at a glance, and the tool each is built
+  with (Xcode, Gradle, Node…) is next to its name.
 
   ![Projects: each folder with its app's icon and a mark of its technology](screenshots/projects.png)
 

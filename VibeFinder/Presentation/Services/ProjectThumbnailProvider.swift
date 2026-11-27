@@ -8,9 +8,8 @@ enum ProjectMark {
     /// The head of Android's robot; SF Symbols has no such symbol, so it's drawn here.
     case robot
 
-    /// - Parameter subkind: the project's platform, as `ProjectPlatform` names it.
-    static func mark(forPlatform subkind: String) -> ProjectMark {
-        switch ProjectPlatform.allCases.first(where: { $0.subkind == subkind }) ?? .other {
+    static func mark(for platform: ProjectPlatform) -> ProjectMark {
+        switch platform {
         case .iOS: .symbol("iphone")
         case .android: .robot
         case .mobile: .symbol("apps.iphone")
@@ -26,8 +25,8 @@ enum ProjectMark {
 }
 
 /// Folders all look alike, so projects get told apart on their folder: what the project is for as
-/// a mark in the folder itself, and the project's own picture (its app's icon, its site's favicon) in
-/// a small circle at the corner when it has one. Everything else goes to the provider it wraps.
+/// a mark in the folder itself, and in a small circle at the corner the project's own picture (its
+/// app's icon, its site's favicon) or, for a library, a box. Everything else goes to the provider it wraps.
 final class ProjectThumbnailProvider: ThumbnailProviding {
     private let base: any ThumbnailProviding
     private let cache = NSCache<NSString, NSImage>()
@@ -49,7 +48,8 @@ final class ProjectThumbnailProvider: ThumbnailProviding {
         let folder = await base.thumbnail(for: item, side: side, scale: scale) ?? NSWorkspace.shared.icon(forFile: item.path)
         guard !Task.isCancelled else { return nil }
         let artwork = item.artworkPath.flatMap { NSImage(contentsOfFile: $0) }
-        let image = Self.compose(folder: folder, artwork: artwork, mark: .mark(forPlatform: item.subkind),
+        let profile = ProjectProfile(subkind: item.subkind) ?? ProjectProfile(platform: .other)
+        let image = Self.compose(folder: folder, artwork: artwork, profile: profile,
                                  side: ThumbnailSize.bucket(for: side), scale: scale)
         cache.setObject(image, forKey: key)
         return image
@@ -68,12 +68,17 @@ final class ProjectThumbnailProvider: ThumbnailProviding {
         static let markSide: CGFloat = 0.36
         static let artwork = CGPoint(x: 0.77, y: 0.22)
         static let artworkSide: CGFloat = 0.36
+        static let roleSide: CGFloat = 0.30
     }
+
+    /// What says "a library" in the corner circle: a package.
+    private static let librarySymbol = "shippingbox.fill"
+    private static let roleColor = NSColor(srgbRed: 0.10, green: 0.36, blue: 0.66, alpha: 1)
 
     /// A darker shade of the folder's own blue, as if pressed into it.
     private static let markColor = NSColor(srgbRed: 0.02, green: 0.25, blue: 0.52, alpha: 0.55)
 
-    private static func compose(folder: NSImage, artwork: NSImage?, mark: ProjectMark, side: CGFloat, scale: CGFloat) -> NSImage {
+    private static func compose(folder: NSImage, artwork: NSImage?, profile: ProjectProfile, side: CGFloat, scale: CGFloat) -> NSImage {
         let pixels = Int((side * max(scale, 1)).rounded())
         guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels, bitsPerSample: 8,
                                             samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
@@ -84,9 +89,11 @@ final class ProjectThumbnailProvider: ThumbnailProviding {
         NSGraphicsContext.current = context
         context.imageInterpolation = .high
         folder.draw(in: NSRect(x: 0, y: 0, width: side, height: side))
-        draw(mark, centeredAt: Layout.front, side: Layout.markSide * side, in: side)
+        draw(ProjectMark.mark(for: profile.platform), centeredAt: Layout.front, side: Layout.markSide * side, in: side)
         if let artwork {
             draw(artwork, inCircleAt: Layout.artwork, diameter: Layout.artworkSide * side, in: side)
+        } else if profile.role == .library {
+            drawLibraryBadge(at: Layout.artwork, diameter: Layout.roleSide * side, in: side)
         }
         NSGraphicsContext.restoreGraphicsState()
         let image = NSImage(size: bitmap.size)
@@ -134,6 +141,25 @@ final class ProjectThumbnailProvider: ThumbnailProviding {
         antennae.lineCapStyle = .round
         markColor.setStroke()
         antennae.stroke()
+    }
+
+    /// A white circle with a box in it: this project is a library.
+    private static func drawLibraryBadge(at center: CGPoint, diameter: CGFloat, in canvas: CGFloat) {
+        let circle = NSRect(x: center.x * canvas - diameter / 2, y: center.y * canvas - diameter / 2, width: diameter, height: diameter)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.3)
+        shadow.shadowBlurRadius = max(1, canvas * 0.02)
+        shadow.shadowOffset = NSSize(width: 0, height: -max(0.5, canvas * 0.008))
+        shadow.set()
+        NSColor.white.setFill()
+        NSBezierPath(ovalIn: circle).fill()
+        NSGraphicsContext.restoreGraphicsState()
+        let configuration = NSImage.SymbolConfiguration(pointSize: diameter * 0.5, weight: .semibold)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [roleColor]))
+        guard let symbol = NSImage(systemSymbolName: librarySymbol, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else { return }
+        let size = symbol.size
+        symbol.draw(in: NSRect(x: circle.midX - size.width / 2, y: circle.midY - size.height / 2, width: size.width, height: size.height))
     }
 
     /// The project's own picture in a small circle with a white rim, like a profile picture.

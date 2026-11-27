@@ -178,7 +178,7 @@ private struct TempFolder {
         #expect(facts.existing == ["app/src/main/AndroidManifest.xml"])
         #expect(facts.xcodeProject == "SDKROOT = macosx;")
         // Node's manifest is read before the Xcode project's: this one is a server.
-        #expect(ProjectPlatformRules.platform(for: facts) == .server)
+        #expect(ProjectPlatformRules.profile(for: facts).platform == .server)
     }
 }
 
