@@ -37,6 +37,8 @@ struct LibraryCommands: Commands {
                     Text(arrangement.title).tag(arrangement)
                 }
             }
+            Button(browser.showsInspector ? "Hide Inspector" : "Show Inspector") { browser.showsInspector.toggle() }
+                .keyboardShortcut("i", modifiers: [.command, .option])
             Divider()
             Button("Collapse All Groups") { browser.setAllSectionsCollapsed(true) }
                 .disabled(!browser.canCollapseSections)

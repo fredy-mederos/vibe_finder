@@ -41,6 +41,12 @@ and items can be dragged out to other apps.
 
 ![Screenshots as a grid, grouped by date, with one group collapsed](screenshots/screenshots.png)
 
+The inspector, a panel on the right you show or hide from the toolbar (Option-Command-I), takes a
+closer look at what's selected, and what it shows depends on what that is: a large preview, a
+picture's dimensions, a recording's length, an app's version, where the file lives and how it was
+recognized, the text found inside a document or read in a screenshot, and for a project what its
+folder holds, as a short tree.
+
 The only thing Vibe Finder can change is what you tell it to: Move to Trash (the trash button, the
 context menu or Command-Delete) asks first and sends the selection to the Trash, where it can be put
 back from. Nothing is ever deleted for good.

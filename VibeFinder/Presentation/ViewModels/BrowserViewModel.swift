@@ -61,6 +61,11 @@ final class BrowserViewModel {
         didSet { preferences.set(tileSize, forKey: Keys.tileSize) }
     }
 
+    /// The panel on the right, with a closer look at the selection.
+    var showsInspector: Bool {
+        didSet { preferences.set(showsInspector, forKey: Keys.inspector) }
+    }
+
     /// Paths of the selected items.
     var selection: Set<String> = []
 
@@ -98,6 +103,7 @@ final class BrowserViewModel {
         static let arrangement = "browser.arrangement"
         static let layout = "browser.layout"
         static let tileSize = "browser.tileSize"
+        static let inspector = "browser.inspector"
     }
 
     init(library: LibraryViewModel, arrange: ArrangeItems, searchContent: SearchContent, preferences: UserDefaults = .standard) {
@@ -109,6 +115,7 @@ final class BrowserViewModel {
         layout = preferences.string(forKey: Keys.layout).flatMap(BrowserLayout.init) ?? .grid
         let size = preferences.double(forKey: Keys.tileSize)
         tileSize = Self.tileSizes.contains(size) ? size : 128
+        showsInspector = preferences.bool(forKey: Keys.inspector)
     }
 
     var isSearching: Bool { !SearchTerms.parse(searchText).isEmpty }

@@ -446,6 +446,48 @@ private final class StubTrash: ItemTrashing {
     }
 }
 
+// MARK: - Inspecting
+
+@Suite struct InspectItemTests {
+    private struct Listing: FolderListing {
+        let folders: [String: [FolderEntry]]
+        func entries(ofFolderAtPath path: String) -> [FolderEntry] { folders[path] ?? [] }
+    }
+
+    private struct Texts: IndexedTextReading {
+        func indexedText(forPath path: String) -> String? { path.hasSuffix(".png") ? "  Sign in to Acme\nEmail address  " : nil }
+    }
+
+    @Test func aProjectIsOutlinedACoupleOfLevelsDeep() {
+        let listing = Listing(folders: [
+            "/code/app": [FolderEntry(name: "README.md", isFolder: false), FolderEntry(name: "src", isFolder: true),
+                          FolderEntry(name: ".git", isFolder: true), FolderEntry(name: "node_modules", isFolder: true),
+                          FolderEntry(name: "App.xcodeproj", isFolder: true), FolderEntry(name: "a.txt", isFolder: false)],
+            "/code/app/src": [FolderEntry(name: "main.swift", isFolder: false), FolderEntry(name: "views", isFolder: true)],
+            "/code/app/src/views": [FolderEntry(name: "deep.swift", isFolder: false)],
+            "/code/app/node_modules": [FolderEntry(name: "left-pad", isFolder: true)],
+        ])
+        let inspection = InspectItem(listing: listing, texts: Texts(), entriesPerFolder: 4)
+            .execute(makeItem("/code/app", kind: .projects))
+        // Folders first, then files by name; hidden ones gone; one entry over the limit.
+        #expect(inspection.outline.map(\.name) == ["App.xcodeproj", "node_modules", "src", "a.txt"])
+        #expect(inspection.omitted == 1)
+        // Two levels: src is opened, what's under its folders isn't, and neither are dependencies or packages.
+        let source = inspection.outline[2]
+        #expect(source.children.map(\.name) == ["views", "main.swift"])
+        #expect(source.children[0].children.isEmpty)
+        #expect(inspection.outline[0].children.isEmpty)
+        #expect(inspection.outline[1].children.isEmpty)
+        #expect(inspection.text == nil)
+    }
+
+    @Test func aFileShowsTheStartOfItsText() {
+        let inspect = InspectItem(listing: Listing(folders: [:]), texts: Texts(), excerptLength: 10)
+        #expect(inspect.execute(makeItem("/a/login.png", kind: .screenshots)) == ItemInspection(text: "Sign in to"))
+        #expect(inspect.execute(makeItem("/a/song.mp3", kind: .music)) == ItemInspection())
+    }
+}
+
 // MARK: - Folder sizes
 
 @Suite struct FolderSizeTests {

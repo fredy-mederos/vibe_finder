@@ -182,6 +182,18 @@ private struct TempFolder {
     }
 }
 
+@Suite struct FolderListingTests {
+    @Test func listsNamesAndWhichAreFolders() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        try folder.write("src/main.swift")
+        try folder.write("README.md")
+        let entries = FileSystemFolderListing().entries(ofFolderAtPath: folder.path).sorted { $0.name < $1.name }
+        #expect(entries == [FolderEntry(name: "README.md", isFolder: false), FolderEntry(name: "src", isFolder: true)])
+        #expect(FileSystemFolderListing().entries(ofFolderAtPath: folder.path + "/missing").isEmpty)
+    }
+}
+
 @Suite struct FolderSizerTests {
     @Test func addsUpEverythingInsideAFolder() throws {
         let folder = try TempFolder()
@@ -294,6 +306,8 @@ private struct TempFolder {
         // Typed punctuation is never read as search syntax.
         #expect(store.search(terms: ["\"", "AND", "("], limit: 10).isEmpty)
 
+        #expect(store.indexedText(forPath: "/a/notes.md") == "Remember to pay the electricity bill")
+        #expect(store.indexedText(forPath: "/a/empty.pdf") == nil)
         // New text replaces the old one, and pruning forgets files that are gone.
         store.save([record("/a/invoice.pdf", kind: .pdfs, text: "Receipt for a bicycle")])
         #expect(store.search(terms: ["factura"], limit: 10).isEmpty)

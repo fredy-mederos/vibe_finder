@@ -5,7 +5,7 @@ import FinderDomain
 /// The index on disk: what enrichment learned about each file, and the text found in them in a
 /// full-text table (FTS5) for content search. One SQLite file in the app's data folder; it only ever
 /// holds things that can be rebuilt from the user's folders.
-public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, @unchecked Sendable {
+public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, IndexedTextReading, @unchecked Sendable {
     // Every use of the connection goes through `lock`.
     private let lock = NSLock()
     private var database: OpaquePointer?
@@ -195,6 +195,17 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, @unche
             }
             sqlite3_finalize(statement)
             return hits
+        }
+    }
+
+    // MARK: - IndexedTextReading
+
+    public func indexedText(forPath path: String) -> String? {
+        lock.withLock {
+            let statement = prepare("SELECT content.body FROM content JOIN files ON files.id = content.rowid WHERE files.path = ?")
+            defer { sqlite3_finalize(statement) }
+            Self.bind(statement, 1, path)
+            return sqlite3_step(statement) == SQLITE_ROW ? Self.text(statement, 0) : nil
         }
     }
 

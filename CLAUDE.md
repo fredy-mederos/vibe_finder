@@ -102,6 +102,9 @@ minutes on a real library, so only when the change is across the board). Nothing
   project, an app, a package) what `FolderSizeEnricher` measured. `FileItem.size` is what the scan
   saw and, with the date, what tells a file changed: never overwrite it.
 - The appearance (system, light, dark) is `AppearanceModel`, applied to the whole app.
+- The inspector (`Presentation/Views/InspectorView.swift`) shows what's selected. What every item
+  has comes from `FileItem`; what takes reading (a project folder's outline, the text the index holds)
+  is the `InspectItem` use case, run off the main thread when the selection changes.
 - Collapsed groups are view state (`BrowserViewModel.collapsedSections`, per place, kept while the
   app runs). A folded group still has its header and count; its items aren't selected.
 - `scripts/install.sh` builds Release into ~/Applications. `scripts/make-icon.swift` draws the icon

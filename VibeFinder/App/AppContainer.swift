@@ -8,6 +8,7 @@ struct AppContainer {
     let library: LibraryViewModel
     let browser: BrowserViewModel
     let appearance: AppearanceModel
+    let inspectItem: InspectItem
     let thumbnails: any ThumbnailProviding
     let files: any FileActing
 
@@ -56,6 +57,7 @@ struct AppContainer {
                                        preferences: preferences)
         options.apply(to: browser)
         return AppContainer(library: library, browser: browser, appearance: AppearanceModel(preferences: preferences),
+                            inspectItem: InspectItem(listing: FileSystemFolderListing(), texts: index, policy: policy),
                             thumbnails: ProjectThumbnailProvider(base: QuickLookThumbnailProvider()), files: WorkspaceFileActions())
     }
 
@@ -74,6 +76,7 @@ struct AppContainer {
 ///     -VFSearch "text"                   start with a search
 ///     -VFLayout list                     grid or list
 ///     -VFSelectItem "invoice"            select the first shown item with this in its name
+///     -VFInspector YES                   open the inspector
 struct LaunchOptions {
     var folders: [String]?
     var dataDirectory: URL?
@@ -81,6 +84,7 @@ struct LaunchOptions {
     var search: String?
     var layout: BrowserLayout?
     var selectedName: String?
+    var showsInspector: Bool?
 
     static var current: LaunchOptions {
         let defaults = UserDefaults.standard
@@ -90,7 +94,8 @@ struct LaunchOptions {
             kind: defaults.string(forKey: "VFSelect").flatMap(Kind.init),
             search: defaults.string(forKey: "VFSearch"),
             layout: defaults.string(forKey: "VFLayout").flatMap(BrowserLayout.init),
-            selectedName: defaults.string(forKey: "VFSelectItem")
+            selectedName: defaults.string(forKey: "VFSelectItem"),
+            showsInspector: defaults.object(forKey: "VFInspector") == nil ? nil : defaults.bool(forKey: "VFInspector")
         )
     }
 
@@ -99,5 +104,6 @@ struct LaunchOptions {
         if let layout { browser.layout = layout }
         if let search { browser.searchText = search }
         if let selectedName { browser.selectWhenShown(nameContaining: selectedName) }
+        if let showsInspector { browser.showsInspector = showsInspector }
     }
 }

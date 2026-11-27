@@ -33,7 +33,8 @@ private struct DetailView: View {
             if browser.showsOverview {
                 OverviewView(library: container.library, browser: browser, thumbnails: container.thumbnails)
             } else {
-                BrowserView(library: container.library, browser: browser, thumbnails: container.thumbnails, files: container.files)
+                BrowserView(library: container.library, browser: browser, inspectItem: container.inspectItem,
+                            thumbnails: container.thumbnails, files: container.files)
             }
         }
         .navigationTitle(title)

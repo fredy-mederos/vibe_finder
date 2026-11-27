@@ -83,6 +83,11 @@ public protocol ContentSearching: Sendable {
     func search(terms: [String], limit: Int) -> [ContentHit]
 }
 
+/// Gives back the text the index holds for a file.
+public protocol IndexedTextReading: Sendable {
+    func indexedText(forPath path: String) -> String?
+}
+
 // MARK: - Looking inside files
 
 public protocol ImageInspecting: Sendable {
@@ -101,6 +106,11 @@ public protocol TextExtracting: Sendable {
 /// Reads the text in a picture (OCR).
 public protocol TextRecognizing: Sendable {
     func recognizeText(inImageAt path: String) -> String?
+}
+
+/// Lists what's directly inside a folder.
+public protocol FolderListing: Sendable {
+    func entries(ofFolderAtPath path: String) -> [FolderEntry]
 }
 
 /// Adds up what a folder holds.

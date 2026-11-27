@@ -5,6 +5,7 @@ import FinderDomain
 struct BrowserView: View {
     let library: LibraryViewModel
     let browser: BrowserViewModel
+    let inspectItem: InspectItem
     let thumbnails: any ThumbnailProviding
     let files: any FileActing
 
@@ -32,6 +33,12 @@ struct BrowserView: View {
             InfoBar(items: browser.selectedItems, total: browser.result.count, files: files) {
                 browser.requestTrashOfSelection()
             }
+        }
+        .inspector(isPresented: $browser.showsInspector) {
+            InspectorView(items: browser.selectedItems, inspectItem: inspectItem, thumbnails: thumbnails, files: files) {
+                browser.requestTrashOfSelection()
+            }
+            .inspectorColumnWidth(min: 260, ideal: 320, max: 480)
         }
         .toolbar {
             BrowserToolbar(browser: browser)
@@ -112,6 +119,14 @@ private struct BrowserToolbar: ToolbarContent {
                     .frame(width: 110)
                     .help("Thumbnail size")
             }
+        }
+        ToolbarItem {
+            Button {
+                browser.showsInspector.toggle()
+            } label: {
+                Label("Inspector", systemImage: "sidebar.trailing")
+            }
+            .help("Show or hide the preview and details of what's selected")
         }
     }
 }
