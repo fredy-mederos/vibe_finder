@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import OSLog
 import FinderDomain
 
 /// Asks Apple's on-device language model what a document or a video is. Nothing leaves the Mac. The
@@ -82,11 +83,15 @@ public actor FoundationModelsClassifier: LanguageUnderstanding, ItemDescribing {
         do {
             return try await question()
         } catch {
+            // Never silently: which errors pass and which don't is read off these names.
+            Self.log.error("The on-device model didn't answer: \(String(describing: error), privacy: .public)")
             guard Self.passingErrors.contains(where: String(describing: error).contains) else { return nil }
             pausedUntil = .now + Self.pause
             throw ModelUnavailable()
         }
     }
+
+    private static let log = Logger(subsystem: "com.fredymederos.VibeFinder", category: "model")
 
     /// Written in the language the Mac is used in, so the lines read like the rest of the app.
     private static var descriptionInstructions: String {
