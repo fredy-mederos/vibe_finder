@@ -103,6 +103,11 @@ stored answers are dropped and worked out again. Nothing leaves the Mac; don't a
 
 ## Git
 
+- Commit every finished piece of work without being asked, and push it straight to `main` on
+  `origin`: no branch, no pull request, no asking first (the owner's standing instruction, 2026-11-27).
+  One commit per finished thing, only once the package's tests pass and the app builds without
+  warnings, with a message that says what changed for the user. Say in the reply what was committed
+  and pushed. A push that would need `--force` is the exception: ask first.
 - Remote: `github.com/fredy-mederos/vibe_finder`. Commits use the repo-local identity
   `Fredy Mederos <fmfredd@gmail.com>`; don't change it to the work address.
 - Nothing about the user's employer goes into the repository: no names, ticket keys or real file
