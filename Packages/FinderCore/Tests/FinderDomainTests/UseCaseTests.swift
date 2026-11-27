@@ -606,6 +606,9 @@ private final class StubTrash: ItemTrashing {
         #expect(androidLibrary == ProjectProfile(platform: .android, role: .library))
         #expect(androidLibrary.subkind == "Android libraries")
         #expect(profile(manifests: ["build.gradle": "id 'com.android.application' apply false\nid 'com.android.library' apply false"]).role == .app)
+        // The module can be a folder of any name; an app module anywhere makes it an app.
+        #expect(profile(manifests: ["build.gradle.kts": "plugins {}", "sdk/build.gradle.kts": "id(\"com.android.library\")"]).subkind == "Android libraries")
+        #expect(profile(manifests: ["sdk/build.gradle": "id 'com.android.library'", "sample/build.gradle": "id 'com.android.application'"]).subkind == "Android")
         // Xcode: what the targets build.
         let framework = "SDKROOT = iphoneos; productType = \"com.apple.product-type.framework\";"
         #expect(profile(xcode: framework).subkind == "iOS libraries")

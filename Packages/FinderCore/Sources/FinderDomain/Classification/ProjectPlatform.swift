@@ -85,6 +85,10 @@ public enum ProjectPlatformRules {
         "composer.json",
     ]
 
+    /// Build files read in every folder right under the root too: a Gradle project's modules are
+    /// folders of any name ("app", "library", "sdk"), each saying what it builds.
+    public static let moduleManifestNames = ["build.gradle", "build.gradle.kts"]
+
     /// Paths whose mere existence says something.
     public static let probedPaths = [
         "app/src/main/AndroidManifest.xml", "src/main/AndroidManifest.xml", "android", "ios", "macos", "windows", "linux",
@@ -122,7 +126,8 @@ public enum ProjectPlatformRules {
         if facts.rootEntries.contains(where: { $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace") }) {
             return app(.iOS)
         }
-        let gradle = text(of: ["build.gradle", "build.gradle.kts", "app/build.gradle", "app/build.gradle.kts"], in: facts)
+        let gradle = facts.manifests.filter { moduleManifestNames.contains(($0.key as NSString).lastPathComponent) }
+            .sorted { $0.key < $1.key }.map(\.value).joined(separator: "\n").lowercased()
         let hasAndroidManifest = facts.existing.contains { $0.hasSuffix("AndroidManifest.xml") }
         if !gradle.isEmpty || hasAndroidManifest {
             if hasAndroidManifest || mentions(gradle, ["com.android", "android.application", "android.library", "androidx."]) {

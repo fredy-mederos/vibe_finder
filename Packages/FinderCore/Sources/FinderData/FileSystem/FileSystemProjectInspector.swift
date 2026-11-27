@@ -7,6 +7,8 @@ public struct FileSystemProjectInspector: ProjectInspecting {
     private static let maxManifestBytes = 512 * 1024
     /// Xcode project files of big apps run to several megabytes.
     private static let maxProjectFileBytes = 16 * 1024 * 1024
+    /// Folders under the root looked into for a module's build file, at most.
+    private static let maxModules = 40
 
     public init() {}
 
@@ -16,6 +18,14 @@ public struct FileSystemProjectInspector: ProjectInspecting {
         for relativePath in ProjectPlatformRules.manifestPaths {
             if let text = Self.text(atPath: path + "/" + relativePath, limit: Self.maxManifestBytes) {
                 facts.manifests[relativePath] = text
+            }
+        }
+        // Modules: in name order, so a project with more of them than the limit is always read the same way.
+        for folder in facts.rootEntries.sorted().filter({ !$0.hasPrefix(".") }).prefix(Self.maxModules) {
+            for name in ProjectPlatformRules.moduleManifestNames where facts.manifests[folder + "/" + name] == nil {
+                if let text = Self.text(atPath: path + "/" + folder + "/" + name, limit: Self.maxManifestBytes) {
+                    facts.manifests[folder + "/" + name] = text
+                }
             }
         }
         for relativePath in ProjectPlatformRules.probedPaths where fileManager.fileExists(atPath: path + "/" + relativePath) {

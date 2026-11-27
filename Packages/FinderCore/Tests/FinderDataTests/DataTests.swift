@@ -172,9 +172,11 @@ private struct TempFolder {
         try folder.write("App.xcodeproj/project.pbxproj", "SDKROOT = macosx;")
         try folder.write("app/src/main/AndroidManifest.xml", "<manifest/>")
         try folder.write("src/main.js", "console.log(1)")
+        try folder.write("sdk/build.gradle.kts", "plugins { id(\"com.android.library\") }")
+        try folder.write("sdk/src/deep/build.gradle.kts", "too deep to be a module")
         let facts = FileSystemProjectInspector().facts(forProjectAt: folder.path)
-        #expect(facts.rootEntries == ["package.json", "App.xcodeproj", "app", "src"])
-        #expect(facts.manifests.keys.sorted() == ["package.json"])
+        #expect(facts.rootEntries == ["package.json", "App.xcodeproj", "app", "src", "sdk"])
+        #expect(facts.manifests.keys.sorted() == ["package.json", "sdk/build.gradle.kts"])
         #expect(facts.existing == ["app/src/main/AndroidManifest.xml"])
         #expect(facts.xcodeProject == "SDKROOT = macosx;")
         // Node's manifest is read before the Xcode project's: this one is a server.
