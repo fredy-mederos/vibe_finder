@@ -103,6 +103,12 @@ public protocol TextRecognizing: Sendable {
     func recognizeText(inImageAt path: String) -> String?
 }
 
+/// Adds up what a folder holds.
+public protocol FolderSizing: Sendable {
+    /// The room everything inside takes on disk; nil when the path isn't a folder or can't be read.
+    func sizeOfFolder(atPath path: String) -> Int64?
+}
+
 /// Reads the few files a project's tools describe it with.
 public protocol ProjectInspecting: Sendable {
     func facts(forProjectAt path: String) -> ProjectFacts

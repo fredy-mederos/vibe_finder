@@ -54,6 +54,7 @@ public struct EnrichmentStages: OptionSet, Sendable, Hashable {
     /// A step whose rules changed gets a new bit, so that step alone runs again for what's indexed
     /// (1 << 8 and 1 << 9 were the platform step's earlier sets of rules).
     public static let projectPlatform = EnrichmentStages(rawValue: 1 << 10)
+    public static let folderSize = EnrichmentStages(rawValue: 1 << 11)
 }
 
 /// What was learned about a file the last time it was enriched, valid while its size and date stay.
@@ -63,15 +64,17 @@ public struct CachedEnrichment: Sendable, Equatable {
     public var classification: Classification
     public var detail: String
     public var artworkPath: String?
+    public var measuredSize: Int64?
     public var stages: EnrichmentStages
 
     public init(size: Int64, modified: Date, classification: Classification, detail: String, artworkPath: String? = nil,
-                stages: EnrichmentStages) {
+                measuredSize: Int64? = nil, stages: EnrichmentStages) {
         self.size = size
         self.modified = modified
         self.classification = classification
         self.detail = detail
         self.artworkPath = artworkPath
+        self.measuredSize = measuredSize
         self.stages = stages
     }
 

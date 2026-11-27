@@ -196,7 +196,7 @@ private struct InfoBar: View {
                 SelectedItemInfo(item: item, files: files)
                 TrashButton(action: trash)
             } else if items.count > 1 {
-                Text("\(items.count) selected · \(items.reduce(Int64(0)) { $0 + $1.size }.formattedFileSize)")
+                Text("\(items.count) selected · \(items.reduce(Int64(0)) { $0 + $1.sizeOnDisk }.formattedFileSize)")
                 Spacer(minLength: 0)
                 TrashButton(action: trash)
             } else {

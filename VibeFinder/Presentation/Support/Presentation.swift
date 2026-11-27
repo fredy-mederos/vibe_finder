@@ -149,8 +149,8 @@ extension FileItem {
         detail.isEmpty ? modified.formatted(date: .abbreviated, time: .omitted) : detail
     }
 
-    /// Packages and folders don't report a size.
+    /// What it weighs on disk; a folder that hasn't been measured yet has nothing to say.
     var sizeText: String {
-        size > 0 ? size.formattedFileSize : "—"
+        sizeOnDisk > 0 ? sizeOnDisk.formattedFileSize : "—"
     }
 }

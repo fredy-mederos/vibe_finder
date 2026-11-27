@@ -59,6 +59,7 @@ public struct ScanLibrary: Sendable {
             if let known {
                 item.classification = known.classification
                 item.artworkPath = known.artworkPath
+                item.measuredSize = known.measuredSize
                 if !known.detail.isEmpty { item.detail = known.detail }
             }
             if planner.needsEnrichment(item, cached: known, settings: settings) { pending.append(item) }

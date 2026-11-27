@@ -30,7 +30,10 @@ content, with thumbnails, and search them by name or by the text inside.
 - **Files**: Archives, Installers, Design files, Fonts, loose Code, Keys & Certificates and the rest.
 
 The overview shows how much there is of each kind and the latest few. Each kind opens as a grid of
-thumbnails or a list, grouped by date, type or folder, with its subkinds as one-click filters. A
+thumbnails or a list, grouped by date, type or folder, or ordered by name or size, with its subkinds
+as one-click filters. Everything shows what it weighs on disk: a file its size, and a project's
+folder, an app or any package everything inside it (dependencies and build output included), added
+up in the background. A
 click on a group's header collapses it (Option-click does it for every group), so a long list
 becomes a short table of contents. The bar at the bottom tells where the selected file lives and how
 it was recognized. Space previews with Quick Look, double-click opens, right-click reveals in Finder,

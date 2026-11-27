@@ -58,6 +58,9 @@ public struct FileItem: Identifiable, Hashable, Sendable {
     public var detail: String
     /// For a project, the picture it goes by (its app's icon, its site's favicon), when it has one.
     public var artworkPath: String?
+    /// For a folder (a project, an app, any package), everything inside it added up, once it's been
+    /// measured. A scan only knows a file's own size, and of a project only its sources.
+    public var measuredSize: Int64?
     /// The name without case or diacritics, for searching.
     public let folded: String
 
@@ -79,6 +82,9 @@ public struct FileItem: Identifiable, Hashable, Sendable {
 
     public var id: String { path }
     public var folder: String { (path as NSString).deletingLastPathComponent }
+
+    /// The room it takes on disk: measured when it's a folder, its own size otherwise.
+    public var sizeOnDisk: Int64 { measuredSize ?? size }
 
     public var classification: Classification {
         get { Classification(kind: kind, subkind: subkind, source: source, isUnclear: isUnclear) }

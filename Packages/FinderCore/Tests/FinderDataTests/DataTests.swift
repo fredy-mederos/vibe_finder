@@ -182,6 +182,22 @@ private struct TempFolder {
     }
 }
 
+@Suite struct FolderSizerTests {
+    @Test func addsUpEverythingInsideAFolder() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        try folder.write("app/main.js", String(repeating: "x", count: 10_000))
+        try folder.write("app/node_modules/lib/index.js", String(repeating: "x", count: 50_000))
+        try folder.write("app/.git/objects/pack", String(repeating: "x", count: 20_000))
+        let size = try #require(FileSystemFolderSizer().sizeOfFolder(atPath: folder.path + "/app"))
+        // Space on disk comes in blocks, so at least the bytes written.
+        #expect(size >= 80_000)
+        #expect(size < 400_000)
+        #expect(FileSystemFolderSizer().sizeOfFolder(atPath: folder.path + "/app/main.js") == nil)
+        #expect(FileSystemFolderSizer().sizeOfFolder(atPath: folder.path + "/missing") == nil)
+    }
+}
+
 @Suite struct SQLiteIndexStoreTests {
     private func record(_ path: String, kind: Kind, text: String?, stages: EnrichmentStages = .text) -> EnrichmentRecord {
         let facts = FileFacts(path: path, size: 42, modified: Date(timeIntervalSinceReferenceDate: 1_000.5))
@@ -214,6 +230,17 @@ private struct TempFolder {
         #expect(cached["/code/x.png"]?.artworkPath == nil)
     }
 
+    @Test func remembersAFoldersMeasuredSize() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        var app = record("/Applications/Notes.app", kind: .apps, text: nil, stages: .folderSize)
+        app.item.measuredSize = 123_456_789
+        SQLiteIndexStore(directory: folder.url).save([app, record("/a/x.png", kind: .images, text: nil)])
+        let cached = SQLiteIndexStore(directory: folder.url).loadAll()
+        #expect(cached["/Applications/Notes.app"]?.measuredSize == 123_456_789)
+        #expect(cached["/a/x.png"]?.measuredSize == nil)
+    }
+
     @Test func anIndexFromBeforeArtworkKeepsWhatItLearned() throws {
         let folder = try TempFolder()
         defer { folder.remove() }
@@ -234,8 +261,10 @@ private struct TempFolder {
         #expect(store.loadAll()["/a/x.png"]?.classification.kind == .screenshots)
         var project = record("/code/app", kind: .projects, text: nil)
         project.item.artworkPath = "/code/app/icon.png"
+        project.item.measuredSize = 99
         store.save([project])
         #expect(store.loadAll()["/code/app"]?.artworkPath == "/code/app/icon.png")
+        #expect(store.loadAll()["/code/app"]?.measuredSize == 99)
     }
 
     @Test func anIndexMadeWithOtherRulesStartsOver() throws {

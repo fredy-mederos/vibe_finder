@@ -32,6 +32,8 @@ struct AppContainer {
             VideoUnderstandingEnricher(model: languageModel),
             TextContentEnricher(extractor: DocumentTextExtractor()),
             DocumentUnderstandingEnricher(model: languageModel),
+            // Last: adding up a big folder takes a moment, and nothing else waits on it.
+            FolderSizeEnricher(sizer: FileSystemFolderSizer()),
         ], cache: index)
         let scanLibrary = ScanLibrary(
             scanner: FileSystemScanner(policy: policy),

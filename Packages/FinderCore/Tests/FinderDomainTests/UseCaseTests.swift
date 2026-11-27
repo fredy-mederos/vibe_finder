@@ -161,7 +161,8 @@ private final class MemoryCache: EnrichmentCaching {
     func loadAll() -> [String: CachedEnrichment] {
         records.withLock { $0.mapValues {
             CachedEnrichment(size: $0.item.size, modified: $0.item.modified, classification: $0.item.classification,
-                             detail: $0.item.detail, artworkPath: $0.item.artworkPath, stages: $0.stages)
+                             detail: $0.item.detail, artworkPath: $0.item.artworkPath, measuredSize: $0.item.measuredSize,
+                             stages: $0.stages)
         } }
     }
 
@@ -442,6 +443,47 @@ private final class StubTrash: ItemTrashing {
         let outcome = await useCase.execute(items)
         #expect(outcome.trashed.isEmpty)
         #expect(useCase.remaining(of: items, after: outcome) == items)
+    }
+}
+
+// MARK: - Folder sizes
+
+@Suite struct FolderSizeTests {
+    private struct Sizer: FolderSizing {
+        func sizeOfFolder(atPath path: String) -> Int64? { path.hasSuffix(".txt") ? nil : 5_000_000 }
+    }
+
+    @Test func foldersAreMeasuredAndTheSizeIsKept() async {
+        let cache = MemoryCache()
+        let enrichLibrary = EnrichLibrary(enrichers: [FolderSizeEnricher(sizer: Sizer())], cache: cache)
+        let settings = LibrarySettings(folders: ["/code"])
+        let files = [
+            FileFacts(path: "/code/app", size: 1_000, role: .project(type: "Node", fileCount: 3)),
+            FileFacts(path: "/Applications/Notes.app", role: .application(version: "1.0")),
+            FileFacts(path: "/code/report.pages", role: .package),
+            FileFacts(path: "/code/empty.txt", size: 0),
+            FileFacts(path: "/code/photo.jpg", size: 2_000_000),
+        ]
+        let scanLibrary = ScanLibrary(scanner: StubScanner(files: files), classifier: RuleBasedClassifier.standard(musicFolder: "/m"),
+                                      cache: cache, planner: enrichLibrary, home: "/Users/me")
+        let first = scanLibrary.execute(settings)
+        // A file with a size of its own has nothing to measure.
+        #expect(Set(first.pending.map(\.name)) == ["app", "Notes.app", "report.pages", "empty.txt"])
+        for await _ in enrichLibrary.run(first.pending, settings: settings) {}
+
+        let items = scanLibrary.execute(settings).items
+        func item(_ name: String) -> FileItem? { items.first { $0.name == name } }
+        // A project's own files are the least it weighs; measured, it counts everything in its folder.
+        #expect(item("app")?.size == 1_000)
+        #expect(item("app")?.sizeOnDisk == 5_000_000)
+        #expect(item("Notes.app")?.sizeOnDisk == 5_000_000)
+        #expect(item("empty.txt")?.sizeOnDisk == 0)
+        #expect(item("photo.jpg")?.sizeOnDisk == 2_000_000)
+
+        // Sorting by size and the summary go by what things weigh on disk.
+        let bySize = ArrangeItems().execute(items, request: BrowseRequest(kind: nil, terms: ["p"], arrangement: .size))
+        #expect(bySize.sections.flatMap(\.items).first?.sizeOnDisk == 5_000_000)
+        #expect(SummarizeLibrary().execute(items).kinds[.projects]?.size == 5_000_000)
     }
 }
 

@@ -65,8 +65,8 @@ final class ItemCollectionController: NSObject, NSCollectionViewDataSource, NSCo
         static let rowHeight: CGFloat = 44
         static let headerHeight: CGFloat = 32
         static let sectionInset = NSEdgeInsets(top: 6, left: 12, bottom: 14, right: 12)
-        /// Room around a tile's thumbnail and under it, for the name and the caption.
-        static let tilePadding = NSSize(width: 20, height: 62)
+        /// Room around a tile's thumbnail and under it, for the name, the caption and the size.
+        static let tilePadding = NSSize(width: 20, height: 76)
     }
 
     init(thumbnails: any ThumbnailProviding, files: any FileActing) {

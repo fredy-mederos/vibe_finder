@@ -11,7 +11,7 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, @unche
     private var database: OpaquePointer?
 
     /// Bumped when the stored shape changes; an older index is dropped and rebuilt.
-    private static let schemaVersion = 2
+    private static let schemaVersion = 3
     /// Text longer than this is cut: enough to find a document by what it says near its start.
     private static let maxTextLength = 200_000
     private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
@@ -35,9 +35,10 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, @unche
         if storedRules != rulesVersion || !(1...Self.schemaVersion).contains(storedSchema) {
             execute("DROP TABLE IF EXISTS files")
             execute("DROP TABLE IF EXISTS content")
-        } else if storedSchema == 1 {
-            // Version 2 added the projects' artwork; what version 1 learned is still good.
-            execute("ALTER TABLE files ADD COLUMN artwork TEXT")
+        } else {
+            // Later versions only added columns; what an earlier one learned is still good.
+            if storedSchema < 2 { execute("ALTER TABLE files ADD COLUMN artwork TEXT") }
+            if storedSchema < 3 { execute("ALTER TABLE files ADD COLUMN measured_size INTEGER") }
         }
         execute("PRAGMA user_version = \(version)")
         execute("""
@@ -52,7 +53,8 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, @unche
                 unclear INTEGER NOT NULL,
                 detail TEXT NOT NULL,
                 stages INTEGER NOT NULL,
-                artwork TEXT
+                artwork TEXT,
+                measured_size INTEGER
             )
             """)
         // rowid is the file's id. Diacritics are folded so "factura" finds "Factúra".
@@ -68,7 +70,7 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, @unche
     public func loadAll() -> [String: CachedEnrichment] {
         lock.withLock {
             var rows: [String: CachedEnrichment] = [:]
-            query("SELECT path, size, modified, kind, subkind, source, unclear, detail, stages, artwork FROM files") { statement in
+            query("SELECT path, size, modified, kind, subkind, source, unclear, detail, stages, artwork, measured_size FROM files") { statement in
                 guard let kind = Kind(rawValue: Self.text(statement, 3)),
                       let source = ClassificationSource(rawValue: Int(sqlite3_column_int(statement, 5))) else { return }
                 rows[Self.text(statement, 0)] = CachedEnrichment(
@@ -78,6 +80,7 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, @unche
                                                    isUnclear: sqlite3_column_int(statement, 6) != 0),
                     detail: Self.text(statement, 7),
                     artworkPath: sqlite3_column_text(statement, 9).map { String(cString: $0) },
+                    measuredSize: sqlite3_column_type(statement, 10) == SQLITE_NULL ? nil : sqlite3_column_int64(statement, 10),
                     stages: EnrichmentStages(rawValue: Int(sqlite3_column_int64(statement, 8)))
                 )
             }
@@ -90,11 +93,12 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, @unche
         lock.withLock {
             execute("BEGIN")
             let upsert = prepare("""
-                INSERT INTO files(path, size, modified, kind, subkind, source, unclear, detail, stages, artwork)
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO files(path, size, modified, kind, subkind, source, unclear, detail, stages, artwork, measured_size)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(path) DO UPDATE SET size = excluded.size, modified = excluded.modified, kind = excluded.kind,
                     subkind = excluded.subkind, source = excluded.source, unclear = excluded.unclear,
-                    detail = excluded.detail, stages = excluded.stages, artwork = excluded.artwork
+                    detail = excluded.detail, stages = excluded.stages, artwork = excluded.artwork,
+                    measured_size = excluded.measured_size
                 RETURNING id
                 """)
             let removeText = prepare("DELETE FROM content WHERE rowid = ?")
@@ -115,6 +119,11 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, @unche
                     Self.bind(upsert, 10, artwork)
                 } else {
                     sqlite3_bind_null(upsert, 10)
+                }
+                if let measuredSize = item.measuredSize {
+                    sqlite3_bind_int64(upsert, 11, measuredSize)
+                } else {
+                    sqlite3_bind_null(upsert, 11)
                 }
                 guard sqlite3_step(upsert) == SQLITE_ROW else { continue }
                 let id = sqlite3_column_int64(upsert, 0)

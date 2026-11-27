@@ -80,12 +80,13 @@ class ThumbnailCell: NSCollectionViewItem {
     }
 }
 
-/// A grid cell: the thumbnail, the name on up to two lines and a caption.
+/// A grid cell: the thumbnail, the name on up to two lines, a caption and the size.
 final class TileItem: ThumbnailCell {
     static let identifier = NSUserInterfaceItemIdentifier("TileItem")
 
     private let nameField = ThumbnailCell.label(size: 12, color: .labelColor)
     private let captionField = ThumbnailCell.label(size: 11, color: .secondaryLabelColor)
+    private let sizeField = ThumbnailCell.label(size: 11, color: .tertiaryLabelColor)
 
     override func loadView() {
         super.loadView()
@@ -95,8 +96,11 @@ final class TileItem: ThumbnailCell {
         nameField.cell?.truncatesLastVisibleLine = true
         captionField.alignment = .center
         captionField.lineBreakMode = .byTruncatingTail
+        sizeField.alignment = .center
+        sizeField.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         view.addSubview(nameField)
         view.addSubview(captionField)
+        view.addSubview(sizeField)
         NSLayoutConstraint.activate([
             thumbnailView.topAnchor.constraint(equalTo: view.topAnchor, constant: 8),
             thumbnailView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 10),
@@ -112,12 +116,16 @@ final class TileItem: ThumbnailCell {
             captionField.topAnchor.constraint(equalTo: nameField.bottomAnchor, constant: 1),
             captionField.leadingAnchor.constraint(equalTo: nameField.leadingAnchor),
             captionField.trailingAnchor.constraint(equalTo: nameField.trailingAnchor),
+            sizeField.topAnchor.constraint(equalTo: captionField.bottomAnchor, constant: 1),
+            sizeField.leadingAnchor.constraint(equalTo: nameField.leadingAnchor),
+            sizeField.trailingAnchor.constraint(equalTo: nameField.trailingAnchor),
         ])
     }
 
     func configure(item: FileItem, caption: String, side: CGFloat, thumbnails: any ThumbnailProviding) {
         nameField.stringValue = item.name
         captionField.stringValue = caption
+        sizeField.stringValue = item.sizeText
         view.toolTip = item.path.abbreviatingHome
         loadThumbnail(for: item, side: side, thumbnails: thumbnails)
     }

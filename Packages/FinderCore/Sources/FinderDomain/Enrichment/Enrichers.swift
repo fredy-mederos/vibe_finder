@@ -96,6 +96,27 @@ public struct MediaMetadataEnricher: ItemEnricher {
     }
 }
 
+/// How much room a folder takes with everything in it: a project with its dependencies and build
+/// output, an app, any document kept as a package. A scan only adds up what it lists.
+public struct FolderSizeEnricher: ItemEnricher {
+    private let sizer: any FolderSizing
+
+    public init(sizer: any FolderSizing) {
+        self.sizer = sizer
+    }
+
+    public let stage: EnrichmentStages = .folderSize
+
+    public func applies(to item: FileItem) -> Bool {
+        // Packages come out of a scan without a size; a file that's really empty costs nothing to ask about.
+        item.kind == .projects || item.kind == .apps || item.size == 0
+    }
+
+    public func enrich(_ draft: inout EnrichmentDraft) async {
+        draft.item.measuredSize = sizer.sizeOfFolder(atPath: draft.item.path)
+    }
+}
+
 /// What a project is (an iOS app, an Android library, a website, a server…), from what its manifests declare.
 public struct ProjectPlatformEnricher: ItemEnricher {
     private let inspector: any ProjectInspecting

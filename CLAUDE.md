@@ -98,6 +98,9 @@ minutes on a real library, so only when the change is across the board). Nothing
   library) are never listed, never asked for a thumbnail and never watched: touching one makes macOS
   ask the user for access to their photos. If the app should ever show what's inside Photos, that's
   PhotoKit with the permission asked on purpose, not the file system.
+- Sizes shown, sorted by and summed are `FileItem.sizeOnDisk`: a file's own size, or for a folder (a
+  project, an app, a package) what `FolderSizeEnricher` measured. `FileItem.size` is what the scan
+  saw and, with the date, what tells a file changed: never overwrite it.
 - The appearance (system, light, dark) is `AppearanceModel`, applied to the whole app.
 - Collapsed groups are view state (`BrowserViewModel.collapsedSections`, per place, kept while the
   app runs). A folded group still has its header and count; its items aren't selected.

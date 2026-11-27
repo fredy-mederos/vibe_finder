@@ -64,7 +64,7 @@ public struct ArrangeItems: Sendable {
         case .name, .folder:
             items.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         case .size:
-            items.sorted { ($0.size, $1.path) > ($1.size, $0.path) }
+            items.sorted { ($0.sizeOnDisk, $1.path) > ($1.sizeOnDisk, $0.path) }
         }
     }
 
@@ -112,7 +112,7 @@ public struct SummarizeLibrary: Sendable {
     public func execute(_ items: [FileItem]) -> LibrarySummary {
         var summary = LibrarySummary()
         for (kind, group) in Dictionary(grouping: items, by: \.kind) {
-            let size = group.reduce(Int64(0)) { $0 + $1.size }
+            let size = group.reduce(Int64(0)) { $0 + $1.sizeOnDisk }
             let recent = group.sorted { ($0.modified, $1.path) > ($1.modified, $0.path) }.prefix(recentCount)
             summary.kinds[kind] = KindSummary(kind: kind, count: group.count, size: size,
                                               subkinds: ArrangeItems.subkindCounts(group), recent: Array(recent))
