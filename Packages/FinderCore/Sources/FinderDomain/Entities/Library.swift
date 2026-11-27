@@ -12,14 +12,29 @@ public struct LibrarySettings: Sendable, Equatable, Codable {
     public var readsTextInImages: Bool
     /// Apple's on-device models may decide what the rules can't.
     public var usesOnDeviceModels: Bool
+    /// The on-device model writes a line about each picture and document, kept and searchable.
+    public var describesItems: Bool
 
     public init(folders: [String], includesApplications: Bool = true, includesProjectFiles: Bool = false,
-                readsTextInImages: Bool = true, usesOnDeviceModels: Bool = true) {
+                readsTextInImages: Bool = true, usesOnDeviceModels: Bool = true, describesItems: Bool = true) {
         self.folders = folders
         self.includesApplications = includesApplications
         self.includesProjectFiles = includesProjectFiles
         self.readsTextInImages = readsTextInImages
         self.usesOnDeviceModels = usesOnDeviceModels
+        self.describesItems = describesItems
+    }
+
+    /// Settings saved by an earlier version lack what was added since: those take their defaults,
+    /// rather than the whole of the user's settings being thrown away.
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        folders = try values.decode([String].self, forKey: .folders)
+        includesApplications = try values.decodeIfPresent(Bool.self, forKey: .includesApplications) ?? true
+        includesProjectFiles = try values.decodeIfPresent(Bool.self, forKey: .includesProjectFiles) ?? false
+        readsTextInImages = try values.decodeIfPresent(Bool.self, forKey: .readsTextInImages) ?? true
+        usesOnDeviceModels = try values.decodeIfPresent(Bool.self, forKey: .usesOnDeviceModels) ?? true
+        describesItems = try values.decodeIfPresent(Bool.self, forKey: .describesItems) ?? true
     }
 
     /// The folders people keep their things in.
@@ -32,6 +47,7 @@ public struct LibrarySettings: Sendable, Equatable, Codable {
         var stages: EnrichmentStages = []
         if !readsTextInImages { stages.insert(.imageText) }
         if !usesOnDeviceModels { stages.formUnion([.imageUnderstanding, .documentUnderstanding, .videoUnderstanding]) }
+        if !usesOnDeviceModels || !describesItems { stages.insert(.description) }
         return stages
     }
 }
@@ -55,6 +71,8 @@ public struct EnrichmentStages: OptionSet, Sendable, Hashable {
     /// (1 << 8, 1 << 9 and 1 << 10 were the platform step's earlier sets of rules).
     public static let projectPlatform = EnrichmentStages(rawValue: 1 << 12)
     public static let folderSize = EnrichmentStages(rawValue: 1 << 11)
+    public static let description = EnrichmentStages(rawValue: 1 << 13)
+    public static let projectSummary = EnrichmentStages(rawValue: 1 << 14)
 }
 
 /// What was learned about a file the last time it was enriched, valid while its size and date stay.
@@ -65,16 +83,18 @@ public struct CachedEnrichment: Sendable, Equatable {
     public var detail: String
     public var artworkPath: String?
     public var measuredSize: Int64?
+    public var summary: String?
     public var stages: EnrichmentStages
 
     public init(size: Int64, modified: Date, classification: Classification, detail: String, artworkPath: String? = nil,
-                measuredSize: Int64? = nil, stages: EnrichmentStages) {
+                measuredSize: Int64? = nil, summary: String? = nil, stages: EnrichmentStages) {
         self.size = size
         self.modified = modified
         self.classification = classification
         self.detail = detail
         self.artworkPath = artworkPath
         self.measuredSize = measuredSize
+        self.summary = summary
         self.stages = stages
     }
 
@@ -83,14 +103,33 @@ public struct CachedEnrichment: Sendable, Equatable {
     }
 }
 
-/// The outcome of enriching one item: what it is now, the steps it went through and its text.
+/// An item a scan found with enrichment steps still to go through, and the ones it already has.
+public struct PendingItem: Sendable, Equatable {
+    public var item: FileItem
+    /// Steps done on this version of the file: they aren't run again.
+    public var done: EnrichmentStages
+
+    public init(item: FileItem, done: EnrichmentStages = []) {
+        self.item = item
+        self.done = done
+    }
+}
+
+/// What a round of enrichment means for the text kept for content search.
+public enum TextUpdate: Sendable, Equatable {
+    /// No step that reads text ran this time: what's stored stands.
+    case keep
+    /// The text found (nil when there's none) replaces what was stored.
+    case replace(String?)
+}
+
+/// The outcome of enriching one item: what it is now, the steps it has been through and its text.
 public struct EnrichmentRecord: Sendable {
     public var item: FileItem
     public var stages: EnrichmentStages
-    /// The text found in it, for content search; nil when it has none.
-    public var text: String?
+    public var text: TextUpdate
 
-    public init(item: FileItem, stages: EnrichmentStages, text: String?) {
+    public init(item: FileItem, stages: EnrichmentStages, text: TextUpdate) {
         self.item = item
         self.stages = stages
         self.text = text

@@ -61,6 +61,17 @@ their conventional names. They're scored so the same project always gets the sam
 mark pressed into it, and in a small circle at its corner the picture or, for a library, a box. Marks
 are SF Symbols or drawn here; don't bundle third-party logos.
 
+`FileItem.summary` is the line that says what an item is: for a project the first sentence of its
+README (`ProjectReadmeRules`, nothing generated), for pictures and documents a line the on-device
+model writes once (`DescriptionEnricher`; what's kept of it is `DescriptionPolicy`). It's stored,
+shown in the list and the inspector, and searched through its own full-text table. It never decides
+a kind: generated text describes, rules classify.
+
+Each enrichment step runs once per version of a file: a scan hands over what's pending with the steps
+already done (`PendingItem.done`), and only the missing ones run. So a new step costs only itself on
+a library that's already indexed, and a step that needs what an earlier one found (a document's text)
+asks the index for it when that step didn't run this time.
+
 Answers are stored in the index with the file's size and date and reused until the file changes, so
 the same file keeps its kind. `ClassificationSource` records which of these decided, and the UI shows
 it. When a rule, policy or prompt changes what it would answer, the stored answers have to be worked

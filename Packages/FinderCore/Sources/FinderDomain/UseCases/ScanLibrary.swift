@@ -3,11 +3,11 @@ import Foundation
 /// The library after a scan: every item with its kind, and the ones still to look inside.
 public struct LibraryScan: Sendable {
     public var items: [FileItem]
-    /// Items enrichment hasn't seen in their current state, newest first.
-    public var pending: [FileItem]
+    /// Items with enrichment steps still to go through, projects first and then the newest.
+    public var pending: [PendingItem]
     public var unreadableFolders: [String]
 
-    public init(items: [FileItem], pending: [FileItem], unreadableFolders: [String]) {
+    public init(items: [FileItem], pending: [PendingItem], unreadableFolders: [String]) {
         self.items = items
         self.pending = pending
         self.unreadableFolders = unreadableFolders
@@ -49,7 +49,7 @@ public struct ScanLibrary: Sendable {
         let output = scanner.scan(request)
         let cached = cache.loadAll()
         var items: [FileItem] = []
-        var pending: [FileItem] = []
+        var pending: [PendingItem] = []
         items.reserveCapacity(output.files.count)
         for facts in output.files {
             let classification = classifier.classify(facts)
@@ -60,9 +60,12 @@ public struct ScanLibrary: Sendable {
                 item.classification = known.classification
                 item.artworkPath = known.artworkPath
                 item.measuredSize = known.measuredSize
+                item.summary = known.summary
                 if !known.detail.isEmpty { item.detail = known.detail }
             }
-            if planner.needsEnrichment(item, cached: known, settings: settings) { pending.append(item) }
+            if planner.needsEnrichment(item, cached: known, settings: settings) {
+                pending.append(PendingItem(item: item, done: known?.stages ?? []))
+            }
             items.append(item)
         }
         if !cached.isEmpty {
@@ -70,8 +73,8 @@ public struct ScanLibrary: Sendable {
         }
         // Projects first (there are few and they're quick), then the newest files.
         pending.sort { first, second in
-            let (firstIsProject, secondIsProject) = (first.kind == .projects, second.kind == .projects)
-            return firstIsProject != secondIsProject ? firstIsProject : first.modified > second.modified
+            let (firstIsProject, secondIsProject) = (first.item.kind == .projects, second.item.kind == .projects)
+            return firstIsProject != secondIsProject ? firstIsProject : first.item.modified > second.item.modified
         }
         return LibraryScan(items: items, pending: pending, unreadableFolders: output.unreadableFolders)
     }

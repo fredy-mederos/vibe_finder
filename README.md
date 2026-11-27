@@ -51,8 +51,14 @@ The only thing Vibe Finder can change is what you tell it to: Move to Trash, in 
 of the selection (or Command-Delete), asks first and sends it to the Trash, where it can be put back
 from. Nothing is ever deleted for good, and there's no delete button to hit by accident.
 
-Search looks at names and at contents: the text of documents, PDFs, notes and code, and the text read
-from screenshots and images.
+Search looks at names and at contents: the text of documents, PDFs, notes and code, the text read
+from screenshots and images, and the line written about each of them.
+
+That line says what a picture or a document is ("Boarding pass for a flight from Berlin to Lisbon,
+Gate B12"), so a file called `12-34-56.png` can be told from the next without opening it. The
+on-device model writes it once, in the background, from the picture itself or from the document's
+text; it's kept in the index, shown in the list and the inspector, and never written again unless
+the file changes. A project's line is its own: the first sentence of its README.
 
 ## How it decides what a file is
 
@@ -66,7 +72,8 @@ from screenshots and images.
    contract, a manual…) or what an unlabeled video is from its name.
 
 Every answer is stored, so the same file keeps its kind until it changes. Everything runs on your
-Mac: nothing is sent anywhere. Both the text reading and the models can be turned off in Settings.
+Mac: nothing is sent anywhere. The text reading, the models and the descriptions can each be turned
+off in Settings. Describing pictures needs macOS 27; documents are described on macOS 26 too.
 
 ## Build
 

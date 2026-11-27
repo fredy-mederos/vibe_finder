@@ -222,6 +222,7 @@ func appIcon(_ path: String, pixels: Int, color: NSColor, symbol: String, days: 
 // An Xcode app, an Android app and a website keep their icon where their tools expect it.
 write("Documents/code/pocket-notes/PocketNotes.xcodeproj/project.pbxproj", "SDKROOT = iphoneos;\nIPHONEOS_DEPLOYMENT_TARGET = 18.0;\n", days: 4)
 write("Documents/code/pocket-notes/PocketNotes/App.swift", "import SwiftUI\n", days: 4)
+write("Documents/code/pocket-notes/README.md", "# Pocket Notes\n\nA small notes app for iPhone that keeps everything in plain text files.\n\n## Build\n", days: 4)
 write("Documents/code/pocket-notes/PocketNotes/Assets.xcassets/AppIcon.appiconset/Contents.json", "{}", days: 4)
 appIcon("Documents/code/pocket-notes/PocketNotes/Assets.xcassets/AppIcon.appiconset/icon_64.png", pixels: 64,
         color: .systemYellow, symbol: "note.text", days: 4)

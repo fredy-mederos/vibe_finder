@@ -58,6 +58,9 @@ public struct FileItem: Identifiable, Hashable, Sendable {
     public var detail: String
     /// For a project, the picture it goes by (its app's icon, its site's favicon), when it has one.
     public var artworkPath: String?
+    /// One line saying what it is, in words: a project's own (the start of its README), or written
+    /// once by the on-device model from the file's text or picture and kept.
+    public var summary: String?
     /// For a folder (a project, an app, any package), everything inside it added up, once it's been
     /// measured. A scan only knows a file's own size, and of a project only its sources.
     public var measuredSize: Int64?

@@ -126,7 +126,7 @@ final class TileItem: ThumbnailCell {
         nameField.stringValue = item.name
         captionField.stringValue = caption
         sizeField.stringValue = item.sizeText
-        view.toolTip = item.path.abbreviatingHome
+        view.toolTip = [item.summary, item.path.abbreviatingHome].compactMap { $0 }.joined(separator: "\n")
         loadThumbnail(for: item, side: side, thumbnails: thumbnails)
     }
 }

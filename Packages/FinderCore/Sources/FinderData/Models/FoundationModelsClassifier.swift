@@ -5,7 +5,7 @@ import FinderDomain
 /// Asks Apple's on-device language model what a document or a video is. Nothing leaves the Mac. The
 /// answers are constrained to a fixed list and sampled greedily, so the same input gives the same
 /// answer; an actor, so the model gets one question at a time.
-public actor FoundationModelsClassifier: LanguageUnderstanding {
+public actor FoundationModelsClassifier: LanguageUnderstanding, ItemDescribing {
     public init() {}
 
     public nonisolated var isAvailable: Bool {
@@ -47,6 +47,50 @@ public actor FoundationModelsClassifier: LanguageUnderstanding {
             return response.content.category.domain
         } catch {
             return nil
+        }
+    }
+
+    // MARK: - ItemDescribing
+
+    public func describe(_ source: DescriptionSource, kind: Kind) async -> String? {
+        let session = LanguageModelSession(instructions: Self.descriptionInstructions)
+        do {
+            switch source {
+            case .text(let text):
+                return try await session.respond(to: "Kind of file: \(Self.label(for: kind))\nText found in it:\n\(text)",
+                                                 options: Self.options).content
+            case .image(let path):
+                // The model only takes pictures from macOS 27 on; before that, pictures go undescribed.
+                guard #available(macOS 27.0, *) else { return nil }
+                return try await session.respond(options: Self.options) {
+                    "Say what this \(Self.label(for: kind)) shows."
+                    Attachment(imageURL: URL(fileURLWithPath: path))
+                }.content
+            }
+        } catch {
+            return nil
+        }
+    }
+
+    /// Written in the language the Mac is used in, so the lines read like the rest of the app.
+    private static var descriptionInstructions: String {
+        let code = Locale.current.language.languageCode?.identifier ?? "en"
+        let language = code == "en" ? "U.S. English" : Locale(identifier: "en_US").localizedString(forLanguageCode: code) ?? "U.S. English"
+        return """
+            You write the one line that tells a person what a file is, for a list of their files. At most 12 words. \
+            Say what it is and what it's about, concretely: names, amounts, places, dates when they're there. \
+            No quotes, no file name, never start with "This" or "A screenshot of". You MUST respond in \(language).
+            """
+    }
+
+    private static func label(for kind: Kind) -> String {
+        switch kind {
+        case .screenshots: "screenshot"
+        case .photos: "photo"
+        case .images: "picture"
+        case .pdfs: "PDF document"
+        case .presentations: "presentation"
+        default: "document"
         }
     }
 

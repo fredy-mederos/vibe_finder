@@ -185,7 +185,9 @@ final class ItemCollectionController: NSObject, NSCollectionViewDataSource, NSCo
         if let tile = cell as? TileItem {
             tile.configure(item: item, caption: snippet ?? item.caption, side: tileSize, thumbnails: thumbnails)
         } else if let row = cell as? RowItem {
-            row.configure(item: item, secondary: snippet ?? item.folder.abbreviatingHome, isSnippet: snippet != nil, thumbnails: thumbnails)
+            // What matched, else what it is, else where it is.
+            let words = snippet ?? item.summary
+            row.configure(item: item, secondary: words ?? item.folder.abbreviatingHome, isSnippet: words != nil, thumbnails: thumbnails)
         }
     }
 

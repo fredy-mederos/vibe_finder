@@ -132,7 +132,7 @@ final class LibraryViewModel {
         publish()
     }
 
-    private func enrich(_ pending: [FileItem]) {
+    private func enrich(_ pending: [PendingItem]) {
         enrichment?.cancel()
         guard !pending.isEmpty else {
             indexing = nil

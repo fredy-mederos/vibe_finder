@@ -116,3 +116,58 @@ public enum VideoCategoryPolicy {
         return words.count >= 2
     }
 }
+
+/// What's kept of a line a model wrote about an item: one clean line, or nothing.
+public enum DescriptionPolicy {
+    static let maxLength = 140
+
+    public static func cleaned(_ line: String) -> String? {
+        // Only the first line, without the quotes or the final period models like to add.
+        var text = line.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        text = text.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\"“”'"))
+        if text.hasSuffix("."), !text.hasSuffix("..") { text.removeLast() }
+        guard text.count >= 3 else { return nil }
+        // A model that can't or won't answer says so in the first person: that's not a description.
+        let lowered = text.lowercased()
+        if ["i can't", "i cannot", "i'm sorry", "i am sorry", "i'm unable", "sorry,", "lo siento", "no puedo"].contains(where: lowered.hasPrefix) {
+            return nil
+        }
+        return text.count > maxLength ? String(text.prefix(maxLength - 1)) + "…" : text
+    }
+}
+
+/// What a project's README says the project is: its first paragraph of plain words.
+public enum ProjectReadmeRules {
+    static let maxLength = 160
+
+    public static func summary(fromReadme readme: String) -> String? {
+        var paragraph: [String] = []
+        var inCodeBlock = false
+        for rawLine in readme.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("```") {
+                inCodeBlock.toggle()
+                continue
+            }
+            if inCodeBlock { continue }
+            // Titles, badges, pictures, HTML and rules come before the words and aren't them.
+            let isProse = !line.isEmpty && !["#", "![", "[![", "<", "---", "===", "|", ">"].contains(where: line.hasPrefix)
+            if isProse {
+                paragraph.append(line)
+            } else if !paragraph.isEmpty {
+                break
+            }
+        }
+        var text = paragraph.joined(separator: " ")
+        // Markdown's marks: [words](address) keeps its words; emphasis and code marks go.
+        text = text.replacingOccurrences(of: #"!?\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
+        text = text.replacingOccurrences(of: #"[*_`]"#, with: "", options: .regularExpression)
+        text = text.trimmingCharacters(in: .whitespaces)
+        guard text.count >= 3 else { return nil }
+        // The first sentence is the gist; a long one is cut.
+        if let end = text.range(of: #"[.!?](\s|$)"#, options: .regularExpression) {
+            text = String(text[..<end.lowerBound])
+        }
+        return text.count > maxLength ? String(text.prefix(maxLength - 1)) + "…" : text
+    }
+}

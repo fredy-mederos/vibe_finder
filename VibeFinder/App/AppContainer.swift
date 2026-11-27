@@ -18,11 +18,13 @@ struct AppContainer {
         let dataDirectory = options.dataDirectory ?? defaultDataDirectory
         let index = SQLiteIndexStore(directory: dataDirectory)
         let languageModel = FoundationModelsClassifier()
+        let projectInspector = FileSystemProjectInspector()
 
         // The order is the order the steps run in: what a file says about itself first, a model only
         // for what's still unclear, and text once it's known what the file is.
         let enrichLibrary = EnrichLibrary(enrichers: [
-            ProjectPlatformEnricher(inspector: FileSystemProjectInspector()),
+            ProjectPlatformEnricher(inspector: projectInspector),
+            ProjectSummaryEnricher(inspector: projectInspector),
             ProjectArtworkEnricher(finder: FileSystemProjectArtworkFinder(
                 policy: policy, cacheDirectory: dataDirectory.appendingPathComponent("artwork", isDirectory: true)
             )),
@@ -33,6 +35,8 @@ struct AppContainer {
             VideoUnderstandingEnricher(model: languageModel),
             TextContentEnricher(extractor: DocumentTextExtractor()),
             DocumentUnderstandingEnricher(model: languageModel),
+            // After the text is read: a document is described from it.
+            DescriptionEnricher(describer: languageModel, texts: index),
             // Last: adding up a big folder takes a moment, and nothing else waits on it.
             FolderSizeEnricher(sizer: FileSystemFolderSizer()),
         ], cache: index)

@@ -174,8 +174,11 @@ private struct TempFolder {
         try folder.write("src/main.js", "console.log(1)")
         try folder.write("sdk/build.gradle.kts", "plugins { id(\"com.android.library\") }")
         try folder.write("sdk/src/deep/build.gradle.kts", "too deep to be a module")
+        try folder.write("README.md", "# Shop\n\nTakes orders.\n")
+        #expect(FileSystemProjectInspector().readme(forProjectAt: folder.path) == "# Shop\n\nTakes orders.\n")
+        #expect(FileSystemProjectInspector().readme(forProjectAt: folder.path + "/sdk") == nil)
         let facts = FileSystemProjectInspector().facts(forProjectAt: folder.path)
-        #expect(facts.rootEntries == ["package.json", "App.xcodeproj", "app", "src", "sdk"])
+        #expect(facts.rootEntries == ["package.json", "App.xcodeproj", "app", "src", "sdk", "README.md"])
         #expect(facts.manifests.keys.sorted() == ["package.json", "sdk/build.gradle.kts"])
         #expect(facts.existing == ["app/src/main/AndroidManifest.xml"])
         #expect(facts.xcodeProject == "SDKROOT = macosx;")
@@ -217,7 +220,7 @@ private struct TempFolder {
         let facts = FileFacts(path: path, size: 42, modified: Date(timeIntervalSinceReferenceDate: 1_000.5))
         let item = FileItem(facts: facts, classification: Classification(kind: kind, subkind: "Sub", source: .vision, isUnclear: true),
                             detail: "1 × 2")
-        return EnrichmentRecord(item: item, stages: stages, text: text)
+        return EnrichmentRecord(item: item, stages: stages, text: .replace(text))
     }
 
     @Test func remembersEnrichmentAcrossInstances() throws {
@@ -279,6 +282,30 @@ private struct TempFolder {
         store.save([project])
         #expect(store.loadAll()["/code/app"]?.artworkPath == "/code/app/icon.png")
         #expect(store.loadAll()["/code/app"]?.measuredSize == 99)
+    }
+
+    @Test func descriptionsAreKeptAndSearchedAndTextSurvivesARoundThatDoesNotReadIt() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        let store = SQLiteIndexStore(directory: folder.url)
+        store.save([record("/a/12-34-56.png", kind: .screenshots, text: "Gate B12 Seat 14A")])
+        // A later round only writes the description: the text read before stays.
+        var described = record("/a/12-34-56.png", kind: .screenshots, text: nil)
+        described.text = .keep
+        described.item.summary = "Boarding pass for a flight from Berlin to Lisbon"
+        store.save([described])
+
+        #expect(SQLiteIndexStore(directory: folder.url).loadAll()["/a/12-34-56.png"]?.summary == "Boarding pass for a flight from Berlin to Lisbon")
+        #expect(store.indexedText(forPath: "/a/12-34-56.png") == "Gate B12 Seat 14A")
+        #expect(store.search(terms: ["gate"], limit: 10).map(\.path) == ["/a/12-34-56.png"])
+        // Found by the words written about it, which is also what's shown for the match.
+        #expect(store.search(terms: ["lisbon"], limit: 10).first?.snippet.contains("Boarding pass") == true)
+        // In both its text and its description: one result.
+        store.save([{ var both = described; both.text = .replace("Lisbon airport"); return both }()])
+        #expect(store.search(terms: ["lisbon"], limit: 10).count == 1)
+
+        store.prune(keeping: [])
+        #expect(store.search(terms: ["lisbon"], limit: 10).isEmpty)
     }
 
     @Test func anIndexMadeWithOtherRulesStartsOver() throws {

@@ -13,8 +13,9 @@ public struct EnrichmentBatch: Sendable {
     }
 }
 
-/// Looks inside the files a scan left pending: runs each through the steps that apply to it, stores
-/// what they found (so it's only done once per version of a file) and reports the items as they change.
+/// Looks inside the files a scan left pending: runs each through the steps that apply to it and that
+/// it hasn't been through yet, stores what they found (so every step is done once per version of a
+/// file, even when steps are added later) and reports the items as they change.
 public struct EnrichLibrary: EnrichmentPlanning {
     private let enrichers: [any ItemEnricher]
     private let cache: any EnrichmentCaching
@@ -43,7 +44,7 @@ public struct EnrichLibrary: EnrichmentPlanning {
     }
 
     /// Enriches the items in order, a few at a time, until done or until the stream's consumer stops.
-    public func run(_ items: [FileItem], settings: LibrarySettings) -> AsyncStream<EnrichmentBatch> {
+    public func run(_ items: [PendingItem], settings: LibrarySettings) -> AsyncStream<EnrichmentBatch> {
         let active = activeEnrichers(for: settings)
         let stages = Self.stages(of: active)
         let (cache, concurrency) = (cache, concurrency)
@@ -93,13 +94,16 @@ public struct EnrichLibrary: EnrichmentPlanning {
         batch.removeAll(keepingCapacity: true)
     }
 
-    /// One item through every step that applies; nil when it was interrupted (and so isn't stored).
-    private static func process(_ item: FileItem, with enrichers: [any ItemEnricher], stages: EnrichmentStages) async -> EnrichmentRecord? {
-        var draft = EnrichmentDraft(item: item)
-        for enricher in enrichers where enricher.applies(to: draft.item) {
+    /// One item through every step it still lacks and that applies; nil when it was interrupted (and
+    /// so isn't stored).
+    private static func process(_ pending: PendingItem, with enrichers: [any ItemEnricher], stages: EnrichmentStages) async -> EnrichmentRecord? {
+        var draft = EnrichmentDraft(item: pending.item)
+        var readText = false
+        for enricher in enrichers where !pending.done.contains(enricher.stage) && enricher.applies(to: draft.item) {
             if Task.isCancelled { return nil }
             await enricher.enrich(&draft)
+            readText = readText || enricher.producesText
         }
-        return EnrichmentRecord(item: draft.item, stages: stages, text: draft.text)
+        return EnrichmentRecord(item: draft.item, stages: stages.union(pending.done), text: readText ? .replace(draft.text) : .keep)
     }
 }

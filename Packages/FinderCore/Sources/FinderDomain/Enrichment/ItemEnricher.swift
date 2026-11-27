@@ -19,6 +19,9 @@ public protocol ItemEnricher: Sendable {
     /// False while what the step relies on can't be used (a model that isn't downloaded yet): the step
     /// is left out, and the files it would have looked at get it once it's back.
     var isAvailable: Bool { get }
+    /// The step finds the text content search uses. When no such step runs for an item, the text
+    /// already stored for it is kept.
+    var producesText: Bool { get }
     /// Asked with the item as it is when the step's turn comes, so a step can depend on what the
     /// earlier ones found (text is only read from an image once it's known to be a screenshot).
     func applies(to item: FileItem) -> Bool
@@ -27,6 +30,7 @@ public protocol ItemEnricher: Sendable {
 
 public extension ItemEnricher {
     var isAvailable: Bool { true }
+    var producesText: Bool { false }
 }
 
 /// What enrichment learns is stored per file and reused while the file doesn't change. Bump this

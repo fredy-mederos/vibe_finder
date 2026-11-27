@@ -162,7 +162,7 @@ private final class MemoryCache: EnrichmentCaching {
         records.withLock { $0.mapValues {
             CachedEnrichment(size: $0.item.size, modified: $0.item.modified, classification: $0.item.classification,
                              detail: $0.item.detail, artworkPath: $0.item.artworkPath, measuredSize: $0.item.measuredSize,
-                             stages: $0.stages)
+                             summary: $0.item.summary, stages: $0.stages)
         } }
     }
 
@@ -216,7 +216,7 @@ private struct StubScanner: LibraryScanning {
 
     private func enrich(_ items: [FileItem], with useCase: EnrichLibrary, settings: LibrarySettings? = nil) async -> [FileItem] {
         var result: [FileItem] = []
-        for await batch in useCase.run(items, settings: settings ?? self.settings) { result += batch.items }
+        for await batch in useCase.run(items.map { PendingItem(item: $0) }, settings: settings ?? self.settings) { result += batch.items }
         return result
     }
 
@@ -235,7 +235,7 @@ private struct StubScanner: LibraryScanning {
         #expect(enriched[0].detail == "1000 × 700")
         #expect(!enriched[0].isUnclear)
         let stored = cache.records.withLock { $0["/a/x.png"] }
-        #expect(stored?.text == "Sign in to continue")
+        #expect(stored?.text == .replace("Sign in to continue"))
         #expect(stored?.stages == [.imageMetadata, .imageUnderstanding, .imageText])
     }
 
@@ -304,8 +304,8 @@ private struct StubScanner: LibraryScanning {
         let first = scan(size: 10)
         // Source files inside a project aren't items; its pictures are.
         #expect(first.items.map(\.name) == ["x.png", "logo.png"])
-        #expect(first.pending.map(\.name).sorted() == ["logo.png", "x.png"])
-        _ = await enrich(first.pending, with: enrichLibrary)
+        #expect(first.pending.map(\.item.name).sorted() == ["logo.png", "x.png"])
+        _ = await enrich(first.pending.map(\.item), with: enrichLibrary)
 
         let second = scan(size: 10)
         #expect(second.items[0].kind == .screenshots)
@@ -315,7 +315,7 @@ private struct StubScanner: LibraryScanning {
         // A changed file starts over from the rules.
         let third = scan(size: 11)
         #expect(third.items[0].kind == .images)
-        #expect(third.pending.map(\.name) == ["x.png"])
+        #expect(third.pending.map(\.item.name) == ["x.png"])
     }
 }
 
@@ -389,7 +389,7 @@ private struct StubArtworkFinder: ProjectArtworkFinding {
                                cache: cache, planner: enrichLibrary, home: "/Users/me").execute(settings)
         }
         let first = scan()
-        #expect(first.pending.map(\.name) == ["app"])
+        #expect(first.pending.map(\.item.name) == ["app"])
         for await _ in enrichLibrary.run(first.pending, settings: settings) {}
         let second = scan()
         #expect(second.pending.isEmpty)
@@ -510,7 +510,7 @@ private final class StubTrash: ItemTrashing {
                                       cache: cache, planner: enrichLibrary, home: "/Users/me")
         let first = scanLibrary.execute(settings)
         // A file with a size of its own has nothing to measure.
-        #expect(Set(first.pending.map(\.name)) == ["app", "Notes.app", "report.pages", "empty.txt"])
+        #expect(Set(first.pending.map(\.item.name)) == ["app", "Notes.app", "report.pages", "empty.txt"])
         for await _ in enrichLibrary.run(first.pending, settings: settings) {}
 
         let items = scanLibrary.execute(settings).items
@@ -661,6 +661,7 @@ private final class StubTrash: ItemTrashing {
     @Test func readingAProjectSettlesWhereItGoes() async {
         struct Inspector: ProjectInspecting {
             func facts(forProjectAt path: String) -> ProjectFacts { ProjectFacts(xcodeProject: "SDKROOT = macosx;") }
+            func readme(forProjectAt path: String) -> String? { nil }
         }
         let cache = MemoryCache()
         let enrichLibrary = EnrichLibrary(enrichers: [ProjectPlatformEnricher(inspector: Inspector())], cache: cache)
@@ -718,5 +719,177 @@ private final class StubTrash: ItemTrashing {
         #expect(icons[0].score > page[0].score)
         #expect(native.map { $0 > icons[0].score } == true)
         #expect(ProjectArtworkRules.declaredIcons(fileName: "manifest.json", text: "{}").isEmpty)
+    }
+}
+
+// MARK: - Descriptions
+
+private final class StubDescriber: ItemDescribing {
+    let isAvailable: Bool
+    let asked = Mutex<[DescriptionSource]>([])
+
+    init(isAvailable: Bool = true) {
+        self.isAvailable = isAvailable
+    }
+
+    func describe(_ source: DescriptionSource, kind: Kind) async -> String? {
+        asked.withLock { $0.append(source) }
+        switch source {
+        case .image: return "\"Boarding pass for a flight from Berlin to Lisbon.\""
+        case .text(let text): return text.contains("Total due") ? "Invoice from Acme Bicycles, 1,240 EUR" : nil
+        }
+    }
+}
+
+private struct StoredTexts: IndexedTextReading {
+    var texts: [String: String] = [:]
+    func indexedText(forPath path: String) -> String? { texts[path] }
+}
+
+private final class CountingRecognizer: TextRecognizing {
+    let calls = Mutex(0)
+    func recognizeText(inImageAt path: String) -> String? {
+        calls.withLock { $0 += 1 }
+        return "Gate B12"
+    }
+}
+
+@Suite struct DescriptionTests {
+    private let settings = LibrarySettings(folders: ["/a"])
+
+    private func run(_ useCase: EnrichLibrary, _ pending: [PendingItem], settings: LibrarySettings? = nil) async -> [FileItem] {
+        var result: [FileItem] = []
+        for await batch in useCase.run(pending, settings: settings ?? self.settings) { result += batch.items }
+        return result
+    }
+
+    @Test func picturesAreDescribedFromThePictureAndDocumentsFromTheirText() async {
+        let describer = StubDescriber()
+        let useCase = EnrichLibrary(enrichers: [
+            TextContentEnricher(extractor: StubExtractor()),
+            DescriptionEnricher(describer: describer, texts: StoredTexts()),
+        ], cache: MemoryCache())
+        let items = await run(useCase, [
+            PendingItem(item: makeItem("/a/12-34-56.png", kind: .screenshots)),
+            PendingItem(item: makeItem("/a/scan0042.pdf", kind: .pdfs)),
+        ])
+        func summary(_ name: String) -> String? { items.first { $0.name == name }?.summary }
+        // Cleaned up: one line, no quotes, no final period.
+        #expect(summary("12-34-56.png") == "Boarding pass for a flight from Berlin to Lisbon")
+        #expect(summary("scan0042.pdf") == "Invoice from Acme Bicycles, 1,240 EUR")
+        #expect(describer.asked.withLock { $0 }.contains(.image(path: "/a/12-34-56.png")))
+    }
+
+    @Test func whatIsNotWorthAskingAbout() {
+        let enricher = DescriptionEnricher(describer: StubDescriber(), texts: StoredTexts())
+        #expect(enricher.applies(to: makeItem("/a/x.png", kind: .images, subkind: "PNG")))
+        #expect(!enricher.applies(to: makeItem("/a/star.png", kind: .images, subkind: "Icons")))
+        #expect(!enricher.applies(to: makeItem("/a/logo.svg", kind: .images, subkind: "Vector")))
+        #expect(!enricher.applies(to: makeItem("/p/docs/logo.png", kind: .images, subkind: "PNG", inProject: true)))
+        #expect(!enricher.applies(to: makeItem("/a/song.mp3", kind: .music)))
+        #expect(!enricher.applies(to: makeItem("/a/main.swift", kind: .code)))
+    }
+
+    @Test func aStepAddedLaterDoesNotRepeatTheOnesAlreadyDone() async {
+        let cache = MemoryCache()
+        let recognizer = CountingRecognizer()
+        let describer = StubDescriber()
+        let item = makeItem("/a/12-34-56.png", kind: .screenshots)
+        // First the app only read text in pictures…
+        let before = EnrichLibrary(enrichers: [ImageTextEnricher(recognizer: recognizer)], cache: cache)
+        _ = await run(before, [PendingItem(item: item)])
+        #expect(recognizer.calls.withLock { $0 } == 1)
+        #expect(cache.records.withLock { $0[item.path]?.text } == .replace("Gate B12"))
+
+        // …then it learned to describe them: only that runs, and the text read before is kept.
+        let after = EnrichLibrary(enrichers: [
+            ImageTextEnricher(recognizer: recognizer),
+            DescriptionEnricher(describer: describer, texts: StoredTexts()),
+        ], cache: cache)
+        let cached = cache.loadAll()[item.path]
+        #expect(after.needsEnrichment(item, cached: cached, settings: settings))
+        let described = await run(after, [PendingItem(item: item, done: cached?.stages ?? [])])
+        #expect(recognizer.calls.withLock { $0 } == 1)
+        #expect(described.first?.summary != nil)
+        let record = cache.records.withLock { $0[item.path] }
+        #expect(record?.text == .keep)
+        #expect(record?.stages == [.imageText, .description])
+        #expect(!after.needsEnrichment(item, cached: cache.loadAll()[item.path], settings: settings))
+    }
+
+    @Test func aDocumentReadInAnEarlierRoundIsDescribedFromItsStoredText() async {
+        let describer = StubDescriber()
+        let texts = StoredTexts(texts: ["/a/scan0042.pdf": "Invoice 42\nTotal due: 10"])
+        let useCase = EnrichLibrary(enrichers: [
+            TextContentEnricher(extractor: StubExtractor()),
+            DescriptionEnricher(describer: describer, texts: texts),
+        ], cache: MemoryCache())
+        let items = await run(useCase, [PendingItem(item: makeItem("/a/scan0042.pdf", kind: .pdfs), done: .text)])
+        #expect(items.first?.summary == "Invoice from Acme Bicycles, 1,240 EUR")
+        // Nothing to read, nothing to ask: the model isn't given a name to guess from.
+        let empty = await run(useCase, [PendingItem(item: makeItem("/a/empty.docx", kind: .documents), done: .text)])
+        #expect(empty.first?.summary == nil)
+    }
+
+    @Test func turnedOffInSettingsOrWithoutAModel() {
+        let item = makeItem("/a/12-34-56.png", kind: .screenshots)
+        let useCase = EnrichLibrary(enrichers: [DescriptionEnricher(describer: StubDescriber(), texts: StoredTexts())], cache: MemoryCache())
+        #expect(useCase.needsEnrichment(item, cached: nil, settings: settings))
+        var off = settings
+        off.describesItems = false
+        #expect(!useCase.needsEnrichment(item, cached: nil, settings: off))
+        var noModels = settings
+        noModels.usesOnDeviceModels = false
+        #expect(!useCase.needsEnrichment(item, cached: nil, settings: noModels))
+        let unavailable = EnrichLibrary(enrichers: [DescriptionEnricher(describer: StubDescriber(isAvailable: false), texts: StoredTexts())],
+                                        cache: MemoryCache())
+        #expect(!unavailable.needsEnrichment(item, cached: nil, settings: settings))
+    }
+
+    @Test func whatIsKeptOfAModelsLine() {
+        #expect(DescriptionPolicy.cleaned("  “Login page for Acme.”  ") == "Login page for Acme")
+        #expect(DescriptionPolicy.cleaned("First line\nSecond line") == "First line")
+        #expect(DescriptionPolicy.cleaned("I'm sorry, I can't help with that.") == nil)
+        #expect(DescriptionPolicy.cleaned("   ") == nil)
+        #expect(DescriptionPolicy.cleaned(String(repeating: "word ", count: 60))?.count == 140)
+    }
+
+    @Test func aProjectIsDescribedByItsOwnReadme() async {
+        let readme = """
+            # Pocket Notes
+
+            [![CI](https://example.com/badge.svg)](https://example.com/ci)
+            <img src="docs/screenshot.png">
+
+            A **small** notes app for [iPhone](https://example.com) that syncs
+            with `iCloud`. It also does other things.
+
+            ## Install
+            """
+        #expect(ProjectReadmeRules.summary(fromReadme: readme) == "A small notes app for iPhone that syncs with iCloud")
+        #expect(ProjectReadmeRules.summary(fromReadme: "# Only a title\n\n```\nnpm install\n```\n") == nil)
+        #expect(ProjectReadmeRules.summary(fromReadme: "Tools for the team") == "Tools for the team")
+
+        struct Inspector: ProjectInspecting {
+            func facts(forProjectAt path: String) -> ProjectFacts { ProjectFacts() }
+            func readme(forProjectAt path: String) -> String? { "# App\n\nTracks orders for the shop.\n" }
+        }
+        let useCase = EnrichLibrary(enrichers: [ProjectSummaryEnricher(inspector: Inspector())], cache: MemoryCache())
+        // Not a model's doing: it's there with models turned off.
+        var noModels = settings
+        noModels.usesOnDeviceModels = false
+        let items = await run(useCase, [PendingItem(item: makeItem("/code/shop", kind: .projects))], settings: noModels)
+        #expect(items.first?.summary == "Tracks orders for the shop")
+    }
+
+    @Test func settingsSavedBeforeDescriptionsExistedStillLoad() throws {
+        let saved = #"{"folders":["/Users/me/Work"],"includesApplications":false,"includesProjectFiles":true,"readsTextInImages":false,"usesOnDeviceModels":true}"#
+        let settings = try JSONDecoder().decode(LibrarySettings.self, from: Data(saved.utf8))
+        #expect(settings.folders == ["/Users/me/Work"])
+        #expect(!settings.includesApplications)
+        #expect(settings.includesProjectFiles)
+        #expect(!settings.readsTextInImages)
+        #expect(settings.describesItems)
+        #expect(try JSONDecoder().decode(LibrarySettings.self, from: JSONEncoder().encode(settings)) == settings)
     }
 }

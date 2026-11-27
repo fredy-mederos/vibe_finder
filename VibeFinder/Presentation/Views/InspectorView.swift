@@ -81,7 +81,30 @@ private struct ItemHeading: View {
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .help(String(localized: "Recognized by \(item.source.title)"))
+            if let summary = item.summary {
+                ItemSummary(text: summary, isWrittenByModel: item.kind != .projects)
+            }
         }
+    }
+}
+
+/// The line that says what the item is: a project's own words, or the on-device model's.
+private struct ItemSummary: View {
+    let text: String
+    let isWrittenByModel: Bool
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            if isWrittenByModel {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(.secondary)
+                    .help("Written by Apple Intelligence, on this Mac")
+            }
+            Text(text)
+                .textSelection(.enabled)
+        }
+        .font(.callout)
+        .padding(.top, 4)
     }
 }
 

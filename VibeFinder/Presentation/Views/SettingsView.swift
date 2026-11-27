@@ -28,6 +28,9 @@ struct SettingsView: View {
             Section {
                 Toggle("Read the text in screenshots and images", isOn: binding(\.readsTextInImages))
                 Toggle("Let Apple's on-device models decide what the rules can't", isOn: binding(\.usesOnDeviceModels))
+                Toggle("Describe pictures and documents in a line", isOn: binding(\.describesItems))
+                    .disabled(!library.settings.usesOnDeviceModels)
+                    .help("The on-device model writes one line about each picture and document, once. It's kept, shown in the inspector and the list, and found by search.")
                 LabeledContent("Index") {
                     Button("Rebuild…") { library.rebuildIndex() }
                         .help("Forget what was learned about every file and look inside all of them again")

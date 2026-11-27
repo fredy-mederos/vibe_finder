@@ -122,6 +122,8 @@ public protocol FolderSizing: Sendable {
 /// Reads the few files a project's tools describe it with.
 public protocol ProjectInspecting: Sendable {
     func facts(forProjectAt path: String) -> ProjectFacts
+    /// The start of the project's README, when it has one.
+    func readme(forProjectAt path: String) -> String?
 }
 
 /// Finds the picture a project goes by, among the files in its folder.
@@ -139,6 +141,21 @@ public protocol LanguageUnderstanding: Sendable {
     var isAvailable: Bool { get }
     func documentCategory(name: String, folder: String, excerpt: String) async -> DocumentCategory?
     func videoCategory(name: String, folder: String) async -> VideoCategory?
+}
+
+/// What a describer is given to go on.
+public enum DescriptionSource: Sendable, Equatable {
+    /// The start of the text found in the file.
+    case text(String)
+    /// The picture itself.
+    case image(path: String)
+}
+
+/// Says in one line what an item is.
+public protocol ItemDescribing: Sendable {
+    var isAvailable: Bool { get }
+    /// nil when it can't tell.
+    func describe(_ source: DescriptionSource, kind: Kind) async -> String?
 }
 
 // MARK: - Settings

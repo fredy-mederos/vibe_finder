@@ -37,6 +37,16 @@ public struct FileSystemProjectInspector: ProjectInspecting {
         return facts
     }
 
+    private static let readmeNames: Set<String> = ["readme.md", "readme", "readme.markdown", "readme.txt", "readme.rst"]
+    /// A README's opening is all that's wanted of it.
+    private static let maxReadmeBytes = 16 * 1024
+
+    public func readme(forProjectAt path: String) -> String? {
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
+        guard let name = entries.filter({ Self.readmeNames.contains($0.lowercased()) }).sorted().first else { return nil }
+        return Self.text(atPath: path + "/" + name, limit: Self.maxReadmeBytes)
+    }
+
     static func text(atPath path: String, limit: Int) -> String? {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }

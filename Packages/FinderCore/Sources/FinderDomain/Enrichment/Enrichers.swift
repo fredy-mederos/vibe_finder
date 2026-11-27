@@ -61,6 +61,7 @@ public struct ImageTextEnricher: ItemEnricher {
     }
 
     public let stage: EnrichmentStages = .imageText
+    public let producesText = true
 
     public func applies(to item: FileItem) -> Bool {
         guard !item.inProject, FileFormatCatalog.rasterExtensions.contains(item.ext) else { return false }
@@ -165,6 +166,7 @@ public struct TextContentEnricher: ItemEnricher {
     }
 
     public let stage: EnrichmentStages = .text
+    public let producesText = true
 
     public func applies(to item: FileItem) -> Bool {
         extractor.canExtractText(from: item)
@@ -201,6 +203,70 @@ public struct DocumentUnderstandingEnricher: ItemEnricher {
               let subkind = category.subkind else { return }
         draft.item.subkind = subkind
         draft.item.source = .languageModel
+    }
+}
+
+/// Has the on-device model say in one line what a picture or a document is: "Boarding pass for a
+/// flight from Berlin to Lisbon". Written once, kept in the index and found by search, so a file
+/// named "12-34-56.png" can be told from the next without opening it.
+public struct DescriptionEnricher: ItemEnricher {
+    private let describer: any ItemDescribing
+    /// The text an earlier round stored, for when the step that reads it doesn't run again.
+    private let texts: any IndexedTextReading
+    /// As much of a document's text as it takes to say what it is.
+    private static let excerptLength = 1500
+    private static let describedDocuments: Set<Kind> = [.pdfs, .documents, .presentations]
+    private static let notWorthDescribing: Set<String> = ["Icons", "Vector", "GIFs"]
+
+    public init(describer: any ItemDescribing, texts: any IndexedTextReading) {
+        self.describer = describer
+        self.texts = texts
+    }
+
+    public let stage: EnrichmentStages = .description
+
+    public var isAvailable: Bool { describer.isAvailable }
+
+    public func applies(to item: FileItem) -> Bool {
+        guard !item.inProject else { return false }
+        return Self.describedDocuments.contains(item.kind) || Self.isPicture(item)
+    }
+
+    public func enrich(_ draft: inout EnrichmentDraft) async {
+        let source: DescriptionSource
+        if Self.isPicture(draft.item) {
+            source = .image(path: draft.item.path)
+        } else {
+            let text = (draft.text ?? texts.indexedText(forPath: draft.item.path) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            // A document nothing could be read from gives the model nothing to go on but its name.
+            guard !text.isEmpty else { return }
+            source = .text(String(text.prefix(Self.excerptLength)))
+        }
+        draft.item.summary = await describer.describe(source, kind: draft.item.kind).flatMap(DescriptionPolicy.cleaned)
+    }
+
+    private static func isPicture(_ item: FileItem) -> Bool {
+        pictureKinds.contains(item.kind) && FileFormatCatalog.photographicExtensions.contains(item.ext)
+            && !notWorthDescribing.contains(item.subkind)
+    }
+}
+
+/// What a project says it is: the first lines of its README. Nothing is generated.
+public struct ProjectSummaryEnricher: ItemEnricher {
+    private let inspector: any ProjectInspecting
+
+    public init(inspector: any ProjectInspecting) {
+        self.inspector = inspector
+    }
+
+    public let stage: EnrichmentStages = .projectSummary
+
+    public func applies(to item: FileItem) -> Bool {
+        item.kind == .projects
+    }
+
+    public func enrich(_ draft: inout EnrichmentDraft) async {
+        draft.item.summary = inspector.readme(forProjectAt: draft.item.path).flatMap(ProjectReadmeRules.summary)
     }
 }
 
