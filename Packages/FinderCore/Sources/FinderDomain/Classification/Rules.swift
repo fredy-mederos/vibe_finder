@@ -1,10 +1,12 @@
 import Foundation
 
-/// A folder the scanner found a project in.
+/// A folder the scanner found a project in. Its tool gives a first idea of what it's for; reading
+/// its manifests (`ProjectPlatformEnricher`) settles it.
 struct ProjectFolderRule: ClassificationRule {
     func classify(_ file: FileFacts, format: FileFormat) -> Classification? {
         guard case .project(let type, _) = file.role else { return nil }
-        return Classification(kind: .projects, subkind: type, source: .metadata)
+        let platform = ProjectPlatformRules.firstGuess(forTechnology: type)
+        return Classification(kind: .projects, subkind: platform.subkind, source: .metadata)
     }
 }
 

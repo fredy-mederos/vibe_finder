@@ -433,3 +433,140 @@ private final class StubTrash: ItemTrashing {
         #expect(useCase.remaining(of: items, after: outcome) == items)
     }
 }
+
+// MARK: - Project platform
+
+@Suite struct ProjectPlatformTests {
+    private func platform(root: Set<String> = [], manifests: [String: String] = [:], existing: Set<String> = [],
+                          xcode: String? = nil) -> ProjectPlatform {
+        ProjectPlatformRules.platform(for: ProjectFacts(rootEntries: root, manifests: manifests, existing: existing, xcodeProject: xcode))
+    }
+
+    private func package(_ dependencies: String, dev: String = "") -> [String: String] {
+        ["package.json": "{ \"dependencies\": { \(dependencies) }, \"devDependencies\": { \(dev) } }"]
+    }
+
+    @Test func xcodeProjectsAreForDevicesOrForTheMac() {
+        #expect(platform(xcode: "SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 18.0;") == .iOS)
+        #expect(platform(xcode: "SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 26.0;") == .desktop)
+        // An app for both is a phone app first.
+        #expect(platform(xcode: "IPHONEOS_DEPLOYMENT_TARGET = 18.0; MACOSX_DEPLOYMENT_TARGET = 15.0;") == .iOS)
+        #expect(platform(xcode: "WATCHOS_DEPLOYMENT_TARGET = 11.0;") == .iOS)
+        #expect(platform(root: ["App.xcworkspace"]) == .iOS)
+    }
+
+    @Test func gradleProjectsAreAndroidAppsServersOrLibraries() {
+        #expect(platform(manifests: ["build.gradle": "plugins { id 'com.android.application' version '8.5' apply false }"]) == .android)
+        #expect(platform(manifests: ["build.gradle.kts": "plugins { alias(libs.plugins.android.application) apply false }"]) == .android)
+        #expect(platform(manifests: ["build.gradle.kts": "plugins { java }"], existing: ["app/src/main/AndroidManifest.xml"]) == .android)
+        #expect(platform(manifests: ["build.gradle": "implementation 'org.springframework.boot:spring-boot-starter-web'"]) == .server)
+        #expect(platform(manifests: ["build.gradle.kts": "plugins { `java-library` }"]) == .library)
+    }
+
+    @Test func nodeProjectsGoByWhatTheyDependOn() {
+        #expect(platform(manifests: package("\"react\": \"19\", \"react-dom\": \"19\"")) == .web)
+        #expect(platform(manifests: package("", dev: "\"vite\": \"7\"")) == .web)
+        #expect(platform(manifests: package("\"express\": \"5\"")) == .server)
+        // A site that brings its server along is still a site.
+        #expect(platform(manifests: package("\"express\": \"5\", \"react\": \"19\"")) == .web)
+        #expect(platform(manifests: package("\"react-native\": \"0.80\", \"react\": \"19\"")) == .mobile)
+        #expect(platform(manifests: package("\"electron\": \"38\", \"react\": \"19\"")) == .desktop)
+        #expect(platform(manifests: package("\"left-pad\": \"1\"")) == .library)
+        #expect(platform(manifests: package("\"left-pad\": \"1\""), existing: ["index.html"]) == .web)
+        #expect(platform(manifests: ["package.json": "not json"]) == .library)
+    }
+
+    @Test func flutterProjects() {
+        let flutter = ["pubspec.yaml": "dependencies:\n  flutter:\n    sdk: flutter\n"]
+        #expect(platform(manifests: flutter, existing: ["android", "ios"]) == .mobile)
+        #expect(platform(manifests: flutter, existing: ["macos"]) == .desktop)
+        #expect(platform(manifests: ["pubspec.yaml": "name: parser\n"]) == .library)
+    }
+
+    @Test func theOtherTools() {
+        #expect(platform(manifests: ["requirements.txt": "Django==5.1\n"]) == .server)
+        #expect(platform(root: ["manage.py"], existing: ["manage.py"]) == .server)
+        #expect(platform(manifests: ["pyproject.toml": "dependencies = [\"pandas\"]"]) == .library)
+        #expect(platform(manifests: ["pyproject.toml": "dependencies = [\"pygame\"]"]) == .game)
+        #expect(platform(manifests: ["Gemfile": "gem \"rails\""]) == .server)
+        #expect(platform(manifests: ["Gemfile": "gem \"jekyll\""]) == .web)
+        #expect(platform(manifests: ["Cargo.toml": "axum = \"0.8\""]) == .server)
+        #expect(platform(manifests: ["Cargo.toml": "tauri = \"2\""]) == .desktop)
+        #expect(platform(manifests: ["go.mod": "require github.com/gin-gonic/gin v1.10"]) == .server)
+        #expect(platform(manifests: ["go.mod": "module example.com/tool"]) == .library)
+        #expect(platform(manifests: ["composer.json": "{}"]) == .server)
+        #expect(platform(manifests: ["Package.swift": ".package(url: \"https://github.com/vapor/vapor.git\", from: \"4.0.0\")"]) == .server)
+        #expect(platform(manifests: ["Package.swift": "let package = Package(name: \"Core\")"]) == .library)
+        #expect(platform(manifests: ["pom.xml": "<artifactId>spring-boot-starter-web</artifactId>"]) == .server)
+    }
+
+    @Test func gamesPlainSitesAndTheRest() {
+        #expect(platform(root: ["project.godot", "package.json"], manifests: package("\"react\": \"19\"")) == .game)
+        #expect(platform(existing: ["ProjectSettings/ProjectVersion.txt"]) == .game)
+        #expect(platform(root: [".git", "index.html"], existing: ["index.html"]) == .web)
+        #expect(platform(root: [".git", "CMakeLists.txt"]) == .library)
+        #expect(platform(root: [".git", "notes.txt"]) == .other)
+    }
+
+    @Test func readingAProjectSettlesWhereItGoes() async {
+        struct Inspector: ProjectInspecting {
+            func facts(forProjectAt path: String) -> ProjectFacts { ProjectFacts(xcodeProject: "SDKROOT = macosx;") }
+        }
+        let cache = MemoryCache()
+        let enrichLibrary = EnrichLibrary(enrichers: [ProjectPlatformEnricher(inspector: Inspector())], cache: cache)
+        let settings = LibrarySettings(folders: ["/code"])
+        let files = [FileFacts(path: "/code/notes.txt", size: 1, modified: Date()),
+                     FileFacts(path: "/code/clock", size: 10, role: .project(type: "Xcode", fileCount: 12))]
+        let scanLibrary = ScanLibrary(scanner: StubScanner(files: files), classifier: RuleBasedClassifier.standard(musicFolder: "/m"),
+                                      cache: cache, planner: enrichLibrary, home: "/Users/me")
+        let first = scanLibrary.execute(settings)
+        let project = first.items.first { $0.kind == .projects }
+        #expect(project?.subkind == "iOS")
+        #expect(project?.detail == "Xcode · 12 files")
+        for await _ in enrichLibrary.run(first.pending, settings: settings) {}
+        #expect(scanLibrary.execute(settings).items.first { $0.kind == .projects }?.subkind == "Desktop")
+    }
+}
+
+@Suite struct DeclaredIconTests {
+    @Test func aPageNamesItsIcons() {
+        let html = """
+            <html><head>
+            <link rel="stylesheet" href="/style.css">
+            <link rel="icon" type="image/png" href="/favicon-32.png?v=2">
+            <LINK REL='apple-touch-icon' HREF='icons/touch.png'>
+            <link rel="icon" href="https://example.com/remote.png">
+            </head></html>
+            """
+        let icons = ProjectArtworkRules.declaredIcons(fileName: "index.html", text: html)
+        #expect(icons.map(\.reference) == [.link("/favicon-32.png"), .link("icons/touch.png")])
+        // The touch icon is the bigger of the two.
+        #expect(icons[1].score > icons[0].score)
+        #expect(ProjectArtworkRules.declaresIcons(fileName: "Index.html"))
+        #expect(!ProjectArtworkRules.declaresIcons(fileName: "about.html"))
+    }
+
+    @Test func aPageMayCarryItsIconInside() {
+        let html = #"<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle r='7'/%3E%3C/svg%3E" />"#
+        let icons = ProjectArtworkRules.declaredIcons(fileName: "index.html", text: html)
+        #expect(icons.map(\.reference) == [.inline(data: Data("<svg xmlns='http://www.w3.org/2000/svg'><circle r='7'/></svg>".utf8), fileExtension: "svg")])
+        #expect(ProjectArtworkRules.reference(for: "data:image/png;base64,aGVsbG8=") == .inline(data: Data("hello".utf8), fileExtension: "png"))
+        #expect(ProjectArtworkRules.reference(for: "data:text/html,<b>no</b>") == nil)
+    }
+
+    @Test func aWebAppManifestNamesItsBiggestIcon() {
+        let manifest = """
+            { "name": "Shop", "icons": [
+                { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+                { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" } ] }
+            """
+        let icons = ProjectArtworkRules.declaredIcons(fileName: "manifest.webmanifest", text: manifest)
+        #expect(icons.map(\.reference) == [.link("/icon-512.png")])
+        // Named by a manifest counts for more than named by a page, less than a native app's own icon.
+        let page = ProjectArtworkRules.declaredIcons(fileName: "index.html", text: #"<link rel="icon" href="a.png">"#)
+        let native = ProjectArtworkRules.score(fileName: "ic_launcher.png", folderName: "mipmap-mdpi")
+        #expect(icons[0].score > page[0].score)
+        #expect(native.map { $0 > icons[0].score } == true)
+        #expect(ProjectArtworkRules.declaredIcons(fileName: "manifest.json", text: "{}").isEmpty)
+    }
+}

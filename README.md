@@ -10,10 +10,13 @@ content, with thumbnails, and search them by name or by the text inside.
 
 ## What it shows
 
-- **Work**: Projects (the folders of your code projects, by type: Xcode, Swift Package, Gradle, Node…)
-  and Apps. Each project's folder carries its own picture, its app's icon or its site's favicon, found
-  where its tools keep it, with a small mark of its technology; a project without one gets the mark
-  alone. So projects can be told apart at a glance.
+- **Work**: Projects (the folders of your code projects) and Apps. Projects are sorted by what they're
+  for: iOS, Android, Mobile (cross-platform), Web, Server, Desktop, Games, Libraries & tools. That's
+  read from what each project declares (its Xcode project's platform, its Gradle plugins, the packages
+  a `package.json` depends on…), and it's marked in the folder itself, the way the system marks
+  Documents or Downloads. A project with a picture of its own (its app's icon, the icon its site
+  declares) shows it in a small circle at the folder's corner. So projects can be told apart at a
+  glance, and the tool each is built with (Xcode, Gradle, Node…) is next to its name.
 
   ![Projects: each folder with its app's icon and a mark of its technology](screenshots/projects.png)
 
@@ -94,3 +97,7 @@ cd Packages/FinderCore && swift test
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+The mark on Android projects' folders is drawn after the Android robot, which is reproduced or
+modified from work created and shared by Google and used according to terms described in the
+Creative Commons 3.0 Attribution License.

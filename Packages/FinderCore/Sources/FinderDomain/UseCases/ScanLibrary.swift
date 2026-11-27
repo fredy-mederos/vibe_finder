@@ -67,13 +67,17 @@ public struct ScanLibrary: Sendable {
         if !cached.isEmpty {
             cache.prune(keeping: Set(items.map(\.path)))
         }
-        pending.sort { $0.modified > $1.modified }
+        // Projects first (there are few and they're quick), then the newest files.
+        pending.sort { first, second in
+            let (firstIsProject, secondIsProject) = (first.kind == .projects, second.kind == .projects)
+            return firstIsProject != secondIsProject ? firstIsProject : first.modified > second.modified
+        }
         return LibraryScan(items: items, pending: pending, unreadableFolders: output.unreadableFolders)
     }
 
     private static func detail(for facts: FileFacts) -> String {
         switch facts.role {
-        case .project(_, let fileCount): fileCount == 1 ? "1 file" : "\(fileCount) files"
+        case .project(let type, let fileCount): type + " · " + (fileCount == 1 ? "1 file" : "\(fileCount) files")
         case .application(let version): version.map { "Version \($0)" } ?? ""
         case .file, .package: ""
         }

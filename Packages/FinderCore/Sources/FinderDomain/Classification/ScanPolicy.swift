@@ -75,6 +75,7 @@ public enum ProjectMarkers {
     private static func marker(_ name: String) -> (rank: Int, type: String)? {
         if name.hasSuffix(".xcodeproj") || name.hasSuffix(".xcworkspace") { return (0, "Xcode") }
         switch name {
+        case "project.godot": return (1, "Godot")
         case "pubspec.yaml": return (1, "Flutter")
         case "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts": return (2, "Gradle")
         case "Package.swift": return (3, "Swift Package")

@@ -14,13 +14,17 @@ struct AppContainer {
     static func live(options: LaunchOptions = .current) -> AppContainer {
         let home = NSHomeDirectory()
         let policy = ScanPolicy.standard
-        let index = SQLiteIndexStore(directory: options.dataDirectory ?? defaultDataDirectory)
+        let dataDirectory = options.dataDirectory ?? defaultDataDirectory
+        let index = SQLiteIndexStore(directory: dataDirectory)
         let languageModel = FoundationModelsClassifier()
 
         // The order is the order the steps run in: what a file says about itself first, a model only
         // for what's still unclear, and text once it's known what the file is.
         let enrichLibrary = EnrichLibrary(enrichers: [
-            ProjectArtworkEnricher(finder: FileSystemProjectArtworkFinder(policy: policy)),
+            ProjectPlatformEnricher(inspector: FileSystemProjectInspector()),
+            ProjectArtworkEnricher(finder: FileSystemProjectArtworkFinder(
+                policy: policy, cacheDirectory: dataDirectory.appendingPathComponent("artwork", isDirectory: true)
+            )),
             ImageMetadataEnricher(inspector: ImageIOInspector()),
             ImageUnderstandingEnricher(classifier: VisionImageClassifier()),
             ImageTextEnricher(recognizer: VisionTextRecognizer()),

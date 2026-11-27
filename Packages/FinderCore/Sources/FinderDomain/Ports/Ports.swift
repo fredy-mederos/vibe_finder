@@ -103,6 +103,11 @@ public protocol TextRecognizing: Sendable {
     func recognizeText(inImageAt path: String) -> String?
 }
 
+/// Reads the few files a project's tools describe it with.
+public protocol ProjectInspecting: Sendable {
+    func facts(forProjectAt path: String) -> ProjectFacts
+}
+
 /// Finds the picture a project goes by, among the files in its folder.
 public protocol ProjectArtworkFinding: Sendable {
     func artworkPath(forProjectAt path: String) -> String?

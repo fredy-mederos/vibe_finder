@@ -7,7 +7,7 @@ public struct FileFacts: Sendable, Equatable {
         /// A folder the system shows as one document (a Pages file, a photo library).
         case package
         case application(version: String?)
-        /// A folder holding a code project; `type` is "Xcode", "Node", "Swift Package"…
+        /// A folder holding a code project; `type` is the tool that marks it: "Xcode", "Node", "Gradle"…
         case project(type: String, fileCount: Int)
     }
 

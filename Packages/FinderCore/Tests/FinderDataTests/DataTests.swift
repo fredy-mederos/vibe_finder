@@ -111,6 +111,49 @@ private struct TempFolder {
         #expect(FileSystemProjectArtworkFinder().artworkPath(forProjectAt: web.path) == web.path + "/public/favicon.ico")
     }
 
+    @Test func usesTheIconASitesFrontPageNames() throws {
+        let cache = try TempFolder()
+        defer { cache.remove() }
+        let finder = FileSystemProjectArtworkFinder(cacheDirectory: cache.url)
+
+        // Named by address: "/…" is served from the page's "public" folder.
+        let linked = try TempFolder()
+        defer { linked.remove() }
+        try linked.write("package.json", "{}")
+        try linked.write("client/index.html", #"<link rel="icon" href="/brand/mark.svg">"#)
+        try linked.write("client/public/brand/mark.svg", "<svg/>")
+        #expect(finder.artworkPath(forProjectAt: linked.path) == linked.path + "/client/public/brand/mark.svg")
+
+        // Written into the page: saved as a file, the same one every time.
+        let inline = try TempFolder()
+        defer { inline.remove() }
+        try inline.write("client/index.html", #"<link rel="icon" href="data:image/svg+xml,%3Csvg%3E%3C/svg%3E">"#)
+        let saved = try #require(finder.artworkPath(forProjectAt: inline.path))
+        #expect(saved.hasPrefix(cache.path + "/"))
+        #expect(saved.hasSuffix(".svg"))
+        #expect(try String(contentsOfFile: saved, encoding: .utf8) == "<svg></svg>")
+        #expect(finder.artworkPath(forProjectAt: inline.path) == saved)
+        // Without somewhere to save it, it's left out.
+        #expect(FileSystemProjectArtworkFinder().artworkPath(forProjectAt: inline.path) == nil)
+
+        // A big icon file beats the page's own little one; nothing outside the project is ever used.
+        try inline.write("client/public/icon-512.png", "big")
+        #expect(finder.artworkPath(forProjectAt: inline.path) == inline.path + "/client/public/icon-512.png")
+        let escaping = try TempFolder()
+        defer { escaping.remove() }
+        try escaping.write("index.html", #"<link rel="icon" href="../../../etc/hosts">"#)
+        #expect(finder.artworkPath(forProjectAt: escaping.path) == nil)
+    }
+
+    @Test func usesTheIconAWebAppManifestNames() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        try folder.write("public/manifest.webmanifest", #"{ "icons": [{ "src": "/art/pwa.png", "sizes": "512x512" }] }"#)
+        try folder.write("public/art/pwa.png", "png")
+        try folder.write("public/favicon.ico", "ico")
+        #expect(FileSystemProjectArtworkFinder().artworkPath(forProjectAt: folder.path) == folder.path + "/public/art/pwa.png")
+    }
+
     @Test func aProjectWithoutAnIconHasNone() throws {
         let folder = try TempFolder()
         defer { folder.remove() }
@@ -118,6 +161,24 @@ private struct TempFolder {
         try folder.write("Sources/App/main.swift")
         try folder.write("docs/screenshot.png")
         #expect(FileSystemProjectArtworkFinder().artworkPath(forProjectAt: folder.path) == nil)
+    }
+}
+
+@Suite struct ProjectInspectorTests {
+    @Test func readsWhatTheRulesAskFor() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        try folder.write("package.json", #"{ "dependencies": { "express": "5" } }"#)
+        try folder.write("App.xcodeproj/project.pbxproj", "SDKROOT = macosx;")
+        try folder.write("app/src/main/AndroidManifest.xml", "<manifest/>")
+        try folder.write("src/main.js", "console.log(1)")
+        let facts = FileSystemProjectInspector().facts(forProjectAt: folder.path)
+        #expect(facts.rootEntries == ["package.json", "App.xcodeproj", "app", "src"])
+        #expect(facts.manifests.keys.sorted() == ["package.json"])
+        #expect(facts.existing == ["app/src/main/AndroidManifest.xml"])
+        #expect(facts.xcodeProject == "SDKROOT = macosx;")
+        // Node's manifest is read before the Xcode project's: this one is a server.
+        #expect(ProjectPlatformRules.platform(for: facts) == .server)
     }
 }
 

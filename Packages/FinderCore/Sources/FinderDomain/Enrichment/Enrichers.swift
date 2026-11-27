@@ -96,6 +96,26 @@ public struct MediaMetadataEnricher: ItemEnricher {
     }
 }
 
+/// What a project is for (an iOS app, a website, a server…), from what its manifests declare.
+public struct ProjectPlatformEnricher: ItemEnricher {
+    private let inspector: any ProjectInspecting
+
+    public init(inspector: any ProjectInspecting) {
+        self.inspector = inspector
+    }
+
+    public let stage: EnrichmentStages = .projectPlatform
+
+    public func applies(to item: FileItem) -> Bool {
+        item.kind == .projects
+    }
+
+    public func enrich(_ draft: inout EnrichmentDraft) async {
+        let platform = ProjectPlatformRules.platform(for: inspector.facts(forProjectAt: draft.item.path))
+        draft.item.classification = Classification(kind: .projects, subkind: platform.subkind, source: .metadata)
+    }
+}
+
 /// The picture a project goes by: its app's icon or its site's favicon, found where its tools keep it.
 public struct ProjectArtworkEnricher: ItemEnricher {
     private let finder: any ProjectArtworkFinding

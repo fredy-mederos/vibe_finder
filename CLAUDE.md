@@ -47,11 +47,18 @@ SOLID, concretely:
    Foundation Models language model for what a document or a video is. Constrained to a fixed list,
    greedy sampling, and a model only moves an item when it's confident.
 
-A project's picture follows the same idea (`ProjectArtworkRules`): only the places tools themselves
-keep an icon in (an asset catalog's app icon, an Android launcher icon, a web project's favicon),
-scored so the same project always gets the same one; the folder search is `FileSystemProjectArtworkFinder`.
-How it's drawn on the folder, and the technology marks (plain symbols and letters, never a
-third-party logo), is `Presentation/Services/ProjectThumbnailProvider.swift`.
+Projects follow the same idea. The scanner finds them by their tool's marker (`ProjectMarkers`:
+Xcode, Gradle, Node…), and that tool is only a detail next to the name. What a project is *for* is
+its subkind (`ProjectPlatform`: iOS, Android, Mobile, Web, Server, Desktop, Games, Libraries & tools),
+decided by `ProjectPlatformRules` from the few manifests `FileSystemProjectInspector` reads: a new
+framework is one more name in those lists, with a test. A project's picture (`ProjectArtworkRules`)
+comes only from places tools themselves keep or name an icon: an asset catalog's app icon, an Android
+launcher icon, a web app manifest, a page's `<link rel="icon">` (even written into the page as a
+`data:` address, which `FileSystemProjectArtworkFinder` saves under the data folder), icon files by
+their conventional names. They're scored so the same project always gets the same one.
+`Presentation/Services/ProjectThumbnailProvider.swift` draws the folder: the platform as one flat
+mark pressed into it, and the picture in a small circle at its corner. Marks are SF Symbols or drawn
+here; don't bundle third-party logos.
 
 Answers are stored in the index with the file's size and date and reused until the file changes, so
 the same file keeps its kind. `ClassificationSource` records which of these decided, and the UI shows

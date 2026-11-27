@@ -220,7 +220,7 @@ func appIcon(_ path: String, pixels: Int, color: NSColor, symbol: String, days: 
 }
 
 // An Xcode app, an Android app and a website keep their icon where their tools expect it.
-write("Documents/code/pocket-notes/PocketNotes.xcodeproj/project.pbxproj", "// !$*UTF8*$!\n", days: 4)
+write("Documents/code/pocket-notes/PocketNotes.xcodeproj/project.pbxproj", "SDKROOT = iphoneos;\nIPHONEOS_DEPLOYMENT_TARGET = 18.0;\n", days: 4)
 write("Documents/code/pocket-notes/PocketNotes/App.swift", "import SwiftUI\n", days: 4)
 write("Documents/code/pocket-notes/PocketNotes/Assets.xcassets/AppIcon.appiconset/Contents.json", "{}", days: 4)
 appIcon("Documents/code/pocket-notes/PocketNotes/Assets.xcassets/AppIcon.appiconset/icon_64.png", pixels: 64,
@@ -232,7 +232,19 @@ write("Documents/code/trail-android/app/src/main/java/Main.kt", "fun main() {}\n
 appIcon("Documents/code/trail-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png", pixels: 192,
         color: .systemGreen, symbol: "figure.hiking", days: 20)
 appIcon("Documents/code/web-shop/public/favicon.png", pixels: 192, color: .systemPink, symbol: "cart.fill", days: 35)
-// These have no icon of their own: the mark of their technology stands for them.
+// A Mac app, a server, a game and a site that carries its icon inside its page.
+write("Documents/code/desk-clock/DeskClock.xcodeproj/project.pbxproj", "SDKROOT = macosx;\nMACOSX_DEPLOYMENT_TARGET = 26.0;\n", days: 9)
+write("Documents/code/desk-clock/DeskClock/Assets.xcassets/AppIcon.appiconset/Contents.json", "{}", days: 9)
+appIcon("Documents/code/desk-clock/DeskClock/Assets.xcassets/AppIcon.appiconset/icon_512.png", pixels: 512,
+        color: .systemIndigo, symbol: "clock.fill", days: 9)
+write("Documents/code/orders-api/package.json", "{ \"name\": \"orders-api\", \"dependencies\": { \"express\": \"5\" } }\n", days: 12)
+write("Documents/code/orders-api/server.js", "require('express')().listen(3000)\n", days: 12)
+write("Documents/code/pixel-quest/project.godot", "config_version=5\n", days: 60)
+write("Documents/code/pixel-quest/player.gd", "extends Node2D\n", days: 60)
+write("Documents/code/status-board/.git/HEAD", "ref: refs/heads/main\n", days: 16)
+write("Documents/code/status-board/client/index.html", "<html><head><link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%232f7d4f'/%3E%3C/svg%3E\" /></head></html>\n", days: 16)
+write("Documents/code/status-board/package.json", "{ \"name\": \"status-board\", \"devDependencies\": { \"vite\": \"7\" } }\n", days: 16)
+// These have no picture of their own: the mark of what they're for is all their folder shows.
 write("Documents/code/data-scripts/pyproject.toml", "[project]\nname = \"data-scripts\"\n", days: 50)
 write("Documents/code/data-scripts/clean.py", "print('clean')\n", days: 50)
 write("Documents/code/dotfiles/.git/HEAD", "ref: refs/heads/main\n", days: 300)
@@ -243,7 +255,7 @@ write("Documents/code/acme-app/.git/HEAD", "ref: refs/heads/main\n", days: 2)
 write("Documents/code/acme-app/Sources/AcmeApp/main.swift", "print(\"Hello from Acme\")\n", days: 2)
 write("Documents/code/acme-app/README.md", "# Acme App\n\nA sample project.\n", days: 2)
 picture("Documents/code/acme-app/docs/logo.png", width: 512, height: 512, background: .systemTeal, days: 90)
-write("Documents/code/web-shop/package.json", "{\n  \"name\": \"web-shop\",\n  \"version\": \"1.0.0\"\n}\n", days: 35)
+write("Documents/code/web-shop/package.json", "{ \"name\": \"web-shop\", \"dependencies\": { \"react\": \"19\" } }\n", days: 35)
 write("Documents/code/web-shop/index.js", "console.log('shop')\n", days: 35)
 write("Documents/code/web-shop/node_modules/left-pad/index.js", "module.exports = () => ''\n", days: 35)
 write("Documents/code/snippets/resize.py", "from PIL import Image\n\ndef resize(path):\n    return Image.open(path).resize((64, 64))\n", days: 190)

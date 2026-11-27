@@ -51,6 +51,7 @@ public struct EnrichmentStages: OptionSet, Sendable, Hashable {
     public static let documentUnderstanding = EnrichmentStages(rawValue: 1 << 5)
     public static let videoUnderstanding = EnrichmentStages(rawValue: 1 << 6)
     public static let projectArtwork = EnrichmentStages(rawValue: 1 << 7)
+    public static let projectPlatform = EnrichmentStages(rawValue: 1 << 8)
 }
 
 /// What was learned about a file the last time it was enriched, valid while its size and date stay.

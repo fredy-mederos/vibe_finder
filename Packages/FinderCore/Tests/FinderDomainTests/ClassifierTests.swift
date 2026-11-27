@@ -99,8 +99,10 @@ import Testing
     }
 
     @Test func projectsAreFolders() {
+        // Before its files are read, a project goes where its tool usually means.
         let result = classify("vibe_finder", in: "/Users/me/Documents", role: .project(type: "Xcode", fileCount: 40))
-        #expect(result == Classification(kind: .projects, subkind: "Xcode", source: .metadata))
+        #expect(result == Classification(kind: .projects, subkind: "iOS", source: .metadata))
+        #expect(classify("api", in: "/Users/me/Documents", role: .project(type: "Git repository", fileCount: 2)).subkind == "Other")
     }
 
     @Test func unknownExtensionsAskTheResolver() {
@@ -116,6 +118,7 @@ import Testing
         #expect(ProjectMarkers.projectType(entries: ["README.md", "App.xcodeproj", ".git", "Package.swift"]) == "Xcode")
         #expect(ProjectMarkers.projectType(entries: ["package.json", ".git"]) == "Node")
         #expect(ProjectMarkers.projectType(entries: [".git", "notes.txt"]) == "Git repository")
+        #expect(ProjectMarkers.projectType(entries: ["project.godot", "player.gd"]) == "Godot")
         #expect(ProjectMarkers.projectType(entries: ["notes.txt", "photo.jpg"]) == nil)
     }
 
