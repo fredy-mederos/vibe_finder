@@ -199,10 +199,14 @@ public struct DocumentUnderstandingEnricher: ItemEnricher {
     public func enrich(_ draft: inout EnrichmentDraft) async {
         let excerpt = String((draft.text ?? "").prefix(Self.excerptLength))
         let folder = (draft.item.folder as NSString).lastPathComponent
-        guard let category = await model.documentCategory(name: draft.item.name, folder: folder, excerpt: excerpt),
-              let subkind = category.subkind else { return }
-        draft.item.subkind = subkind
-        draft.item.source = .languageModel
+        do {
+            guard let category = try await model.documentCategory(name: draft.item.name, folder: folder, excerpt: excerpt),
+                  let subkind = category.subkind else { return }
+            draft.item.subkind = subkind
+            draft.item.source = .languageModel
+        } catch {
+            draft.unfinished.insert(stage)
+        }
     }
 }
 
@@ -242,7 +246,11 @@ public struct DescriptionEnricher: ItemEnricher {
             guard !text.isEmpty else { return }
             source = .text(String(text.prefix(Self.excerptLength)))
         }
-        draft.item.summary = await describer.describe(source, kind: draft.item.kind).flatMap(DescriptionPolicy.cleaned)
+        do {
+            draft.item.summary = try await describer.describe(source, kind: draft.item.kind).flatMap(DescriptionPolicy.cleaned)
+        } catch {
+            draft.unfinished.insert(stage)
+        }
     }
 
     private static func isPicture(_ item: FileItem) -> Bool {
@@ -288,10 +296,14 @@ public struct VideoUnderstandingEnricher: ItemEnricher {
 
     public func enrich(_ draft: inout EnrichmentDraft) async {
         let folder = (draft.item.folder as NSString).lastPathComponent
-        if let category = await model.videoCategory(name: draft.item.name, folder: folder),
-           let classification = VideoCategoryPolicy.classification(for: category) {
-            draft.item.classification = classification
+        do {
+            if let category = try await model.videoCategory(name: draft.item.name, folder: folder),
+               let classification = VideoCategoryPolicy.classification(for: category) {
+                draft.item.classification = classification
+            }
+            draft.item.isUnclear = false
+        } catch {
+            draft.unfinished.insert(stage)
         }
-        draft.item.isUnclear = false
     }
 }

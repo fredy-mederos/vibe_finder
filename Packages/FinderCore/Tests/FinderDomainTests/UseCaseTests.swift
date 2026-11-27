@@ -195,10 +195,10 @@ private struct StubRecognizer: TextRecognizing {
 
 private struct StubLanguageModel: LanguageUnderstanding {
     var isAvailable = true
-    func documentCategory(name: String, folder: String, excerpt: String) async -> DocumentCategory? {
+    func documentCategory(name: String, folder: String, excerpt: String) async throws -> DocumentCategory? {
         excerpt.contains("Total due") ? .invoice : .other
     }
-    func videoCategory(name: String, folder: String) async -> VideoCategory? { .musicVideo }
+    func videoCategory(name: String, folder: String) async throws -> VideoCategory? { .musicVideo }
 }
 
 private struct StubExtractor: TextExtracting {
@@ -727,12 +727,15 @@ private final class StubTrash: ItemTrashing {
 private final class StubDescriber: ItemDescribing {
     let isAvailable: Bool
     let asked = Mutex<[DescriptionSource]>([])
+    /// The system is holding the model back.
+    let isLimited = Mutex(false)
 
     init(isAvailable: Bool = true) {
         self.isAvailable = isAvailable
     }
 
-    func describe(_ source: DescriptionSource, kind: Kind) async -> String? {
+    func describe(_ source: DescriptionSource, kind: Kind) async throws -> String? {
+        if isLimited.withLock({ $0 }) { throw ModelUnavailable() }
         asked.withLock { $0.append(source) }
         switch source {
         case .image: return "\"Boarding pass for a flight from Berlin to Lisbon.\""
@@ -844,6 +847,34 @@ private final class CountingRecognizer: TextRecognizing {
         let unavailable = EnrichLibrary(enrichers: [DescriptionEnricher(describer: StubDescriber(isAvailable: false), texts: StoredTexts())],
                                         cache: MemoryCache())
         #expect(!unavailable.needsEnrichment(item, cached: nil, settings: settings))
+    }
+
+    @Test func aModelThatCouldNotBeAskedIsAskedAgainLater() async {
+        let cache = MemoryCache()
+        let describer = StubDescriber()
+        let recognizer = CountingRecognizer()
+        let useCase = EnrichLibrary(enrichers: [
+            ImageTextEnricher(recognizer: recognizer),
+            DescriptionEnricher(describer: describer, texts: StoredTexts()),
+        ], cache: cache)
+        let item = makeItem("/a/12-34-56.png", kind: .screenshots)
+
+        // The system holds the model back (the app is in the background): the rest still gets done.
+        describer.isLimited.withLock { $0 = true }
+        var postponed = 0
+        for await batch in useCase.run([PendingItem(item: item)], settings: settings) { postponed = batch.postponed }
+        #expect(postponed == 1)
+        let stored = cache.loadAll()[item.path]
+        #expect(stored?.stages == [.imageText])
+        #expect(stored?.summary == nil)
+        #expect(useCase.needsEnrichment(item, cached: stored, settings: settings))
+
+        // Later it answers: only the description is done, and it's done for good.
+        describer.isLimited.withLock { $0 = false }
+        let items = await run(useCase, [PendingItem(item: item, done: stored?.stages ?? [])])
+        #expect(items.first?.summary == "Boarding pass for a flight from Berlin to Lisbon")
+        #expect(recognizer.calls.withLock { $0 } == 1)
+        #expect(!useCase.needsEnrichment(item, cached: cache.loadAll()[item.path], settings: settings))
     }
 
     @Test func whatIsKeptOfAModelsLine() {

@@ -22,6 +22,9 @@ final class LibraryViewModel {
     private(set) var isScanning = false
     private(set) var hasScanned = false
     private(set) var indexing: IndexingProgress?
+    /// Items with a step left for later because the on-device model couldn't be asked (the system
+    /// holds it back while the app is in the background). They're tried again on their own.
+    private(set) var postponed = 0
     private(set) var unreadableFolders: [String] = []
     private(set) var settings: LibrarySettings
 
@@ -38,6 +41,9 @@ final class LibraryViewModel {
     @ObservationIgnored private var positions: [String: Int] = [:]
     @ObservationIgnored private var enrichment: Task<Void, Never>?
     @ObservationIgnored private var pendingRescan: Task<Void, Never>?
+    @ObservationIgnored private var retry: Task<Void, Never>?
+    /// How long to wait before asking the model again for what it couldn't do.
+    private static let retryDelay: Duration = .seconds(180)
     @ObservationIgnored private var rescanRequested = false
     @ObservationIgnored private var hasStarted = false
 
@@ -136,20 +142,44 @@ final class LibraryViewModel {
         enrichment?.cancel()
         guard !pending.isEmpty else {
             indexing = nil
+            postponed = 0
             return
         }
         indexing = IndexingProgress(completed: 0, total: pending.count)
+        retry?.cancel()
         let batches = enrichLibrary.run(pending, settings: settings)
         enrichment = Task {
+            var leftForLater = 0
             for await batch in batches {
                 guard !Task.isCancelled else { return }
                 for item in batch.items {
                     if let position = positions[item.path] { allItems[position] = item }
                 }
                 indexing = IndexingProgress(completed: batch.completed, total: batch.total)
+                leftForLater = batch.postponed
                 publish()
             }
-            if !Task.isCancelled { indexing = nil }
+            guard !Task.isCancelled else { return }
+            indexing = nil
+            postponed = leftForLater
+            if leftForLater > 0 { retryLater() }
+        }
+    }
+
+    /// The app came to the front, where the system doesn't hold the model back: no need to wait.
+    func appDidBecomeActive() {
+        guard postponed > 0, indexing == nil, !isScanning else { return }
+        retry?.cancel()
+        rescan()
+    }
+
+    /// A scan finds what's still missing and only that is done.
+    private func retryLater() {
+        retry?.cancel()
+        retry = Task {
+            try? await Task.sleep(for: Self.retryDelay)
+            guard !Task.isCancelled else { return }
+            rescan()
         }
     }
 

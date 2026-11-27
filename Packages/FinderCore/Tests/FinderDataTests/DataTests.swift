@@ -308,6 +308,39 @@ private struct TempFolder {
         #expect(store.search(terms: ["lisbon"], limit: 10).isEmpty)
     }
 
+    @Test func waitsForABusyDatabaseInsteadOfRunningOnAnOldShape() throws {
+        let folder = try TempFolder()
+        defer { folder.remove() }
+        let path = folder.url.appendingPathComponent("index.sqlite").path
+        // The index as an earlier version left it, held for a moment by another connection
+        // (the previous copy of the app still closing).
+        var other: OpaquePointer?
+        sqlite3_open(path, &other)
+        sqlite3_exec(other, """
+            PRAGMA journal_mode = WAL;
+            CREATE TABLE files(id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, size INTEGER NOT NULL, modified REAL NOT NULL,
+                kind TEXT NOT NULL, subkind TEXT NOT NULL, source INTEGER NOT NULL, unclear INTEGER NOT NULL,
+                detail TEXT NOT NULL, stages INTEGER NOT NULL, artwork TEXT, measured_size INTEGER);
+            INSERT INTO files(path, size, modified, kind, subkind, source, unclear, detail, stages)
+                VALUES('/a/x.png', 42, 1000.5, 'screenshots', 'Mac', 1, 0, '10 × 10', 9);
+            PRAGMA user_version = 30007;
+            BEGIN IMMEDIATE;
+            """, nil, nil, nil)
+        nonisolated(unsafe) let held = other
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.4) {
+            sqlite3_exec(held, "COMMIT", nil, nil, nil)
+            sqlite3_close(held)
+        }
+
+        let store = SQLiteIndexStore(directory: folder.url, rulesVersion: 7)
+        // It waited, moved the tables to today's shape and kept what was there.
+        #expect(store.loadAll()["/a/x.png"]?.classification.kind == .screenshots)
+        var described = record("/a/x.png", kind: .screenshots, text: nil)
+        described.item.summary = "A login screen"
+        store.save([described])
+        #expect(store.loadAll()["/a/x.png"]?.summary == "A login screen")
+    }
+
     @Test func anIndexMadeWithOtherRulesStartsOver() throws {
         let folder = try TempFolder()
         defer { folder.remove() }

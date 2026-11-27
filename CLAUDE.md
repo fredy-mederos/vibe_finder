@@ -67,6 +67,11 @@ model writes once (`DescriptionEnricher`; what's kept of it is `DescriptionPolic
 shown in the list and the inspector, and searched through its own full-text table. It never decides
 a kind: generated text describes, rules classify.
 
+A model that can't be asked right now (the system limits it for apps in the background, or it's
+busy) isn't an answer: the port throws `ModelUnavailable`, the step marks itself unfinished and isn't
+recorded as done, and the library tries again when the app comes to the front or a few minutes
+later. Never turn a failed call into "no answer": the file would go without for good.
+
 Each enrichment step runs once per version of a file: a scan hands over what's pending with the steps
 already done (`PendingItem.done`), and only the missing ones run. So a new step costs only itself on
 a library that's already indexed, and a step that needs what an earlier one found (a document's text)

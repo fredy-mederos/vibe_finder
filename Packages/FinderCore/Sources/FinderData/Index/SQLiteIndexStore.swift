@@ -16,34 +16,52 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, Indexe
     private static let maxTextLength = 200_000
     private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
+    /// How long a statement waits for another connection to let go of the database before giving up.
+    private static let busyTimeout: Int32 = 15_000
+    private let version: Int32
+    private let rulesVersion: Int
+    /// The tables are in the shape this version reads and writes. Until they are, nothing is read or
+    /// written: answers are never mixed with a schema they don't fit.
+    private var isReady = false
+
     /// - Parameters:
     ///   - directory: where `index.sqlite` lives; created if needed.
     ///   - rulesVersion: the version of the rules whose answers are stored; an index made with other
     ///     rules is dropped, so every file is looked at again with the current ones.
     public init(directory: URL, rulesVersion: Int = EnrichmentRules.version) {
-        let version = Int32(Self.schemaVersion * 10_000 + rulesVersion)
+        self.rulesVersion = rulesVersion
+        version = Int32(Self.schemaVersion * 10_000 + rulesVersion)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let path = directory.appendingPathComponent("index.sqlite").path
         guard sqlite3_open_v2(path, &database, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
             database = nil
             return
         }
+        // Another copy of the app, or the previous one still closing, may hold the database for a moment.
+        sqlite3_busy_timeout(database, Self.busyTimeout)
         execute("PRAGMA journal_mode = WAL")
         execute("PRAGMA synchronous = NORMAL")
+        lock.withLock { isReady = prepareSchema() }
+    }
+
+    /// Brings the tables to this version's shape, all or nothing. False when it couldn't (the database
+    /// stayed busy): it's tried again the next time the store is used.
+    private func prepareSchema() -> Bool {
+        guard database != nil, execute("BEGIN IMMEDIATE") else { return false }
         let stored = Int(userVersion())
         let (storedSchema, storedRules) = (stored / 10_000, stored % 10_000)
-        if storedRules != rulesVersion || !(1...Self.schemaVersion).contains(storedSchema) {
-            execute("DROP TABLE IF EXISTS files")
-            execute("DROP TABLE IF EXISTS content")
-            execute("DROP TABLE IF EXISTS summaries")
-        } else {
-            // Later versions only added columns; what an earlier one learned is still good.
-            if storedSchema < 2 { execute("ALTER TABLE files ADD COLUMN artwork TEXT") }
-            if storedSchema < 3 { execute("ALTER TABLE files ADD COLUMN measured_size INTEGER") }
-            if storedSchema < 4 { execute("ALTER TABLE files ADD COLUMN summary TEXT") }
+        var done = true
+        if stored != Int(version) {
+            if storedRules != rulesVersion || !(1...Self.schemaVersion).contains(storedSchema) {
+                for table in ["files", "content", "summaries"] { done = execute("DROP TABLE IF EXISTS \(table)") && done }
+            } else {
+                // Later versions only added columns; what an earlier one learned is still good.
+                if storedSchema < 2 { done = execute("ALTER TABLE files ADD COLUMN artwork TEXT") && done }
+                if storedSchema < 3 { done = execute("ALTER TABLE files ADD COLUMN measured_size INTEGER") && done }
+                if storedSchema < 4 { done = execute("ALTER TABLE files ADD COLUMN summary TEXT") && done }
+            }
         }
-        execute("PRAGMA user_version = \(version)")
-        execute("""
+        done = execute("""
             CREATE TABLE IF NOT EXISTS files(
                 id INTEGER PRIMARY KEY,
                 path TEXT NOT NULL UNIQUE,
@@ -59,12 +77,26 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, Indexe
                 measured_size INTEGER,
                 summary TEXT
             )
-            """)
+            """) && done
         // rowid is the file's id. Diacritics are folded so "factura" finds "Factúra".
-        execute("CREATE VIRTUAL TABLE IF NOT EXISTS content USING fts5(body, tokenize = 'unicode61 remove_diacritics 2')")
+        done = execute("CREATE VIRTUAL TABLE IF NOT EXISTS content USING fts5(body, tokenize = 'unicode61 remove_diacritics 2')") && done
         // The one-line descriptions, searched like the text but kept apart from it: a file's own words
         // and the words written about it are different things to show.
-        execute("CREATE VIRTUAL TABLE IF NOT EXISTS summaries USING fts5(body, tokenize = 'unicode61 remove_diacritics 2')")
+        done = execute("CREATE VIRTUAL TABLE IF NOT EXISTS summaries USING fts5(body, tokenize = 'unicode61 remove_diacritics 2')") && done
+        done = execute("PRAGMA user_version = \(version)") && done
+        guard done, execute("COMMIT") else {
+            execute("ROLLBACK")
+            return false
+        }
+        return true
+    }
+
+    /// Runs what uses the tables, once they're in shape; gives `fallback` while they aren't.
+    private func whenReady<Result>(_ fallback: Result, _ body: () -> Result) -> Result {
+        lock.withLock {
+            if !isReady { isReady = prepareSchema() }
+            return isReady ? body() : fallback
+        }
     }
 
     deinit {
@@ -74,7 +106,7 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, Indexe
     // MARK: - EnrichmentCaching
 
     public func loadAll() -> [String: CachedEnrichment] {
-        lock.withLock {
+        whenReady([:]) {
             var rows: [String: CachedEnrichment] = [:]
             query("SELECT path, size, modified, kind, subkind, source, unclear, detail, stages, artwork, measured_size, summary FROM files") { statement in
                 guard let kind = Kind(rawValue: Self.text(statement, 3)),
@@ -97,7 +129,7 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, Indexe
 
     public func save(_ records: [EnrichmentRecord]) {
         guard !records.isEmpty else { return }
-        lock.withLock {
+        whenReady(()) {
             execute("BEGIN")
             let upsert = prepare("""
                 INSERT INTO files(path, size, modified, kind, subkind, source, unclear, detail, stages, artwork, measured_size, summary)
@@ -171,7 +203,7 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, Indexe
     }
 
     public func prune(keeping paths: Set<String>) {
-        lock.withLock {
+        whenReady(()) {
             var gone: [Int64] = []
             query("SELECT id, path FROM files") { statement in
                 if !paths.contains(Self.text(statement, 1)) { gone.append(sqlite3_column_int64(statement, 0)) }
@@ -193,7 +225,7 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, Indexe
     }
 
     public func removeAll() {
-        lock.withLock {
+        whenReady(()) {
             execute("DELETE FROM files")
             execute("DELETE FROM content")
             execute("DELETE FROM summaries")
@@ -207,7 +239,7 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, Indexe
         let match = terms.map { $0.filter { $0.isLetter || $0.isNumber } }.filter { !$0.isEmpty }
             .map { "\"\($0)\"*" }.joined(separator: " ")
         guard !match.isEmpty else { return [] }
-        return lock.withLock {
+        return whenReady([]) {
             var hits: [ContentHit] = []
             var found: Set<String> = []
             // What was written about a file first (it's the shorter, clearer thing to show), then its own text.
@@ -234,7 +266,7 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, Indexe
     // MARK: - IndexedTextReading
 
     public func indexedText(forPath path: String) -> String? {
-        lock.withLock {
+        whenReady(nil) {
             let statement = prepare("SELECT content.body FROM content JOIN files ON files.id = content.rowid WHERE files.path = ?")
             defer { sqlite3_finalize(statement) }
             Self.bind(statement, 1, path)
@@ -244,8 +276,9 @@ public final class SQLiteIndexStore: EnrichmentCaching, ContentSearching, Indexe
 
     // MARK: - SQLite
 
-    private func execute(_ sql: String) {
-        sqlite3_exec(database, sql, nil, nil, nil)
+    @discardableResult
+    private func execute(_ sql: String) -> Bool {
+        sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK
     }
 
     private func prepare(_ sql: String) -> OpaquePointer? {

@@ -5,6 +5,9 @@ public struct EnrichmentDraft: Sendable {
     public var item: FileItem
     /// The text found so far, for content search.
     public var text: String?
+    /// Steps that couldn't do their work this time (a model that couldn't be asked): they aren't
+    /// counted as done, so the item comes back for them.
+    public var unfinished: EnrichmentStages = []
 
     public init(item: FileItem, text: String? = nil) {
         self.item = item

@@ -126,13 +126,17 @@ public enum TextUpdate: Sendable, Equatable {
 /// The outcome of enriching one item: what it is now, the steps it has been through and its text.
 public struct EnrichmentRecord: Sendable {
     public var item: FileItem
+    /// The steps done on this version of the file.
     public var stages: EnrichmentStages
     public var text: TextUpdate
+    /// Steps that have to be tried again: they aren't among `stages`.
+    public var unfinished: EnrichmentStages
 
-    public init(item: FileItem, stages: EnrichmentStages, text: TextUpdate) {
+    public init(item: FileItem, stages: EnrichmentStages, text: TextUpdate, unfinished: EnrichmentStages = []) {
         self.item = item
         self.stages = stages
         self.text = text
+        self.unfinished = unfinished
     }
 }
 

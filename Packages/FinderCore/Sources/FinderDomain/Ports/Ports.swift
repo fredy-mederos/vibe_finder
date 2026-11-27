@@ -137,10 +137,17 @@ public protocol ImageUnderstanding: Sendable {
     func labels(forImageAt path: String) -> [ImageLabel]
 }
 
+/// A model couldn't be asked right now: the system is limiting it (as it does for apps in the
+/// background), it's busy, or it isn't loaded. Not an answer: whoever asked tries again later.
+public struct ModelUnavailable: Error, Sendable {
+    public init() {}
+}
+
 public protocol LanguageUnderstanding: Sendable {
     var isAvailable: Bool { get }
-    func documentCategory(name: String, folder: String, excerpt: String) async -> DocumentCategory?
-    func videoCategory(name: String, folder: String) async -> VideoCategory?
+    /// nil when the model can't tell; throws `ModelUnavailable` when it couldn't be asked.
+    func documentCategory(name: String, folder: String, excerpt: String) async throws -> DocumentCategory?
+    func videoCategory(name: String, folder: String) async throws -> VideoCategory?
 }
 
 /// What a describer is given to go on.
@@ -154,8 +161,8 @@ public enum DescriptionSource: Sendable, Equatable {
 /// Says in one line what an item is.
 public protocol ItemDescribing: Sendable {
     var isAvailable: Bool { get }
-    /// nil when it can't tell.
-    func describe(_ source: DescriptionSource, kind: Kind) async -> String?
+    /// nil when it can't tell; throws `ModelUnavailable` when the model couldn't be asked.
+    func describe(_ source: DescriptionSource, kind: Kind) async throws -> String?
 }
 
 // MARK: - Settings

@@ -20,6 +20,9 @@ struct MainWindow: View {
         .task {
             container.library.start()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            container.library.appDidBecomeActive()
+        }
         .frame(minWidth: 820, minHeight: 480)
     }
 }
@@ -117,6 +120,9 @@ private struct LibraryStatusView: View {
                     .progressViewStyle(.linear)
                     .controlSize(.small)
                 Text("Scanning folders…")
+            } else if library.postponed > 0 {
+                Text("\(library.postponed) waiting for Apple Intelligence")
+                    .help("The system holds the on-device model back for apps in the background. What's left is done when Vibe Finder comes to the front, or in a few minutes.")
             } else {
                 Text("\(library.summary.count) items · \(library.summary.size.formattedFileSize)")
             }

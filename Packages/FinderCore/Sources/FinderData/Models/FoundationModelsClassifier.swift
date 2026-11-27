@@ -12,7 +12,7 @@ public actor FoundationModelsClassifier: LanguageUnderstanding, ItemDescribing {
         if case .available = SystemLanguageModel.default.availability { true } else { false }
     }
 
-    public func documentCategory(name: String, folder: String, excerpt: String) async -> DocumentCategory? {
+    public func documentCategory(name: String, folder: String, excerpt: String) async throws -> DocumentCategory? {
         let session = LanguageModelSession(instructions: """
             You classify one of a person's documents from its file name, its folder and how its text starts. \
             Pick the category that fits best, and "other" when nothing fits or you can't tell.
@@ -23,15 +23,12 @@ public actor FoundationModelsClassifier: LanguageUnderstanding, ItemDescribing {
             Text:
             \(excerpt.isEmpty ? "(no text could be read)" : excerpt)
             """
-        do {
-            let response = try await session.respond(to: prompt, generating: DocumentVerdict.self, options: Self.options)
-            return response.content.category.domain
-        } catch {
-            return nil
+        return try await ask {
+            try await session.respond(to: prompt, generating: DocumentVerdict.self, options: Self.options).content.category.domain
         }
     }
 
-    public func videoCategory(name: String, folder: String) async -> VideoCategory? {
+    public func videoCategory(name: String, folder: String) async throws -> VideoCategory? {
         // The folder is left out on purpose: "Downloads" or "Movies" only pulls the answer off the name.
         let session = LanguageModelSession(instructions: """
             You classify a video file from its file name alone. Categories:
@@ -42,33 +39,52 @@ public actor FoundationModelsClassifier: LanguageUnderstanding, ItemDescribing {
             - other: anything else. Generic names (clip, video, export, final, demo, untitled, a feature or a \
             bug being shown) say nothing about the category: pick other for them, and whenever you are unsure.
             """)
-        do {
-            let response = try await session.respond(to: "File name: \(name)", generating: VideoVerdict.self, options: Self.options)
-            return response.content.category.domain
-        } catch {
-            return nil
+        return try await ask {
+            try await session.respond(to: "File name: \(name)", generating: VideoVerdict.self, options: Self.options).content.category.domain
         }
     }
 
     // MARK: - ItemDescribing
 
-    public func describe(_ source: DescriptionSource, kind: Kind) async -> String? {
+    public func describe(_ source: DescriptionSource, kind: Kind) async throws -> String? {
         let session = LanguageModelSession(instructions: Self.descriptionInstructions)
-        do {
-            switch source {
-            case .text(let text):
-                return try await session.respond(to: "Kind of file: \(Self.label(for: kind))\nText found in it:\n\(text)",
-                                                 options: Self.options).content
-            case .image(let path):
-                // The model only takes pictures from macOS 27 on; before that, pictures go undescribed.
-                guard #available(macOS 27.0, *) else { return nil }
-                return try await session.respond(options: Self.options) {
+        switch source {
+        case .text(let text):
+            return try await ask {
+                try await session.respond(to: "Kind of file: \(Self.label(for: kind))\nText found in it:\n\(text)", options: Self.options).content
+            }
+        case .image(let path):
+            // The model only takes pictures from macOS 27 on; before that, pictures go undescribed.
+            guard #available(macOS 27.0, *) else { return nil }
+            return try await ask {
+                try await session.respond(options: Self.options) {
                     "Say what this \(Self.label(for: kind)) shows."
                     Attachment(imageURL: URL(fileURLWithPath: path))
                 }.content
             }
+        }
+    }
+
+    // MARK: - Asking
+
+    /// While the system is holding the model back, it isn't asked at all.
+    private var pausedUntil: ContinuousClock.Instant?
+    private static let pause: Duration = .seconds(60)
+    /// What the framework calls the errors that pass: the system limiting requests (it does that to
+    /// apps in the background), another request in the way, the model's files not there yet.
+    private static let passingErrors = ["rateLimited", "concurrentRequests", "assetsUnavailable"]
+
+    /// Asks the model. nil when this one question can't be answered (the model refused it, the text is
+    /// in a language it doesn't read…), which is an answer; `ModelUnavailable` when the model couldn't
+    /// be asked at all, which isn't, and the question is put again later.
+    private func ask<Answer: Sendable>(_ question: () async throws -> Answer) async throws -> Answer? {
+        if let pausedUntil, ContinuousClock.now < pausedUntil { throw ModelUnavailable() }
+        do {
+            return try await question()
         } catch {
-            return nil
+            guard Self.passingErrors.contains(where: String(describing: error).contains) else { return nil }
+            pausedUntil = .now + Self.pause
+            throw ModelUnavailable()
         }
     }
 

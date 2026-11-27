@@ -5,11 +5,14 @@ public struct EnrichmentBatch: Sendable {
     public var items: [FileItem]
     public var completed: Int
     public var total: Int
+    /// Items so far with a step left for later (a model that couldn't be asked).
+    public var postponed: Int
 
-    public init(items: [FileItem], completed: Int, total: Int) {
+    public init(items: [FileItem], completed: Int, total: Int, postponed: Int = 0) {
         self.items = items
         self.completed = completed
         self.total = total
+        self.postponed = postponed
     }
 }
 
@@ -52,6 +55,7 @@ public struct EnrichLibrary: EnrichmentPlanning {
             let task = Task(priority: .utility) {
                 var batch: [EnrichmentRecord] = []
                 var completed = 0
+                var postponed = 0
                 var lastFlush = ContinuousClock.now
                 await withTaskGroup(of: EnrichmentRecord?.self) { group in
                     var remaining = items.makeIterator()
@@ -65,9 +69,12 @@ public struct EnrichLibrary: EnrichmentPlanning {
                             break
                         }
                         completed += 1
-                        if let record { batch.append(record) }
+                        if let record {
+                            batch.append(record)
+                            if !record.unfinished.isEmpty { postponed += 1 }
+                        }
                         if batch.count >= Self.batchSize || ContinuousClock.now - lastFlush >= Self.batchInterval {
-                            Self.flush(&batch, to: cache, continuation, completed: completed, total: items.count)
+                            Self.flush(&batch, to: cache, continuation, completed: completed, total: items.count, postponed: postponed)
                             lastFlush = .now
                         }
                         if let item = remaining.next() {
@@ -75,7 +82,7 @@ public struct EnrichLibrary: EnrichmentPlanning {
                         }
                     }
                 }
-                Self.flush(&batch, to: cache, continuation, completed: completed, total: items.count)
+                Self.flush(&batch, to: cache, continuation, completed: completed, total: items.count, postponed: postponed)
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
@@ -87,10 +94,10 @@ public struct EnrichLibrary: EnrichmentPlanning {
     }
 
     private static func flush(_ batch: inout [EnrichmentRecord], to cache: any EnrichmentCaching,
-                              _ continuation: AsyncStream<EnrichmentBatch>.Continuation, completed: Int, total: Int) {
+                              _ continuation: AsyncStream<EnrichmentBatch>.Continuation, completed: Int, total: Int, postponed: Int) {
         guard !batch.isEmpty else { return }
         cache.save(batch)
-        continuation.yield(EnrichmentBatch(items: batch.map(\.item), completed: completed, total: total))
+        continuation.yield(EnrichmentBatch(items: batch.map(\.item), completed: completed, total: total, postponed: postponed))
         batch.removeAll(keepingCapacity: true)
     }
 
@@ -104,6 +111,7 @@ public struct EnrichLibrary: EnrichmentPlanning {
             await enricher.enrich(&draft)
             readText = readText || enricher.producesText
         }
-        return EnrichmentRecord(item: draft.item, stages: stages.union(pending.done), text: readText ? .replace(draft.text) : .keep)
+        return EnrichmentRecord(item: draft.item, stages: stages.union(pending.done).subtracting(draft.unfinished),
+                                text: readText ? .replace(draft.text) : .keep, unfinished: draft.unfinished)
     }
 }
